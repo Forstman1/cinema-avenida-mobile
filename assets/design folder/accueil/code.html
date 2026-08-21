@@ -1,0 +1,329 @@
+<!DOCTYPE html><html class="dark" lang="fr"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Cinéma Avenida - Accueil</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@500;600&amp;family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-secondary-fixed-variant": "#474746",
+                      "on-tertiary-container": "#b1daff",
+                      "secondary-container": "#474746",
+                      "outline-variant": "#5a403e",
+                      "error": "#ffb4ab",
+                      "secondary-fixed": "#e5e2e1",
+                      "on-error": "#690005",
+                      "surface-container": "#201f1f",
+                      "on-surface-variant": "#e2beba",
+                      "on-primary-fixed-variant": "#92030f",
+                      "primary-fixed-dim": "#ffb4ac",
+                      "tertiary-fixed-dim": "#8fcdff",
+                      "on-secondary": "#313030",
+                      "tertiary-container": "#006292",
+                      "primary-fixed": "#ffdad6",
+                      "outline": "#aa8986",
+                      "on-primary": "#690007",
+                      "inverse-surface": "#e5e2e1",
+                      "on-error-container": "#ffdad6",
+                      "on-background": "#e5e2e1",
+                      "inverse-primary": "#b52424",
+                      "surface-container-high": "#2a2a2a",
+                      "on-secondary-container": "#b7b5b4",
+                      "surface": "#131313",
+                      "on-surface": "#e5e2e1",
+                      "primary-container": "#b22222",
+                      "surface-container-low": "#1c1b1b",
+                      "surface-container-highest": "#353534",
+                      "on-tertiary-fixed-variant": "#004b71",
+                      "secondary-fixed-dim": "#c8c6c5",
+                      "tertiary": "#8fcdff",
+                      "surface-tint": "#ffb4ac",
+                      "primary": "#ffb4ac",
+                      "surface-container-lowest": "#0e0e0e",
+                      "error-container": "#93000a",
+                      "on-primary-container": "#ffc8c2",
+                      "surface-bright": "#3a3939",
+                      "on-primary-fixed": "#410003",
+                      "on-tertiary": "#003450",
+                      "background": "#131313",
+                      "secondary": "#c8c6c5",
+                      "on-tertiary-fixed": "#001e30",
+                      "surface-dim": "#131313",
+                      "inverse-on-surface": "#313030",
+                      "surface-variant": "#353534",
+                      "on-secondary-fixed": "#1c1b1b",
+                      "tertiary-fixed": "#cbe6ff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "sm": "8px",
+                      "unit": "4px",
+                      "xs": "4px",
+                      "xl": "32px",
+                      "margin": "20px",
+                      "md": "16px",
+                      "gutter": "16px",
+                      "lg": "24px"
+              },
+              "fontFamily": {
+                      "display-lg": [
+                              "EB Garamond"
+                      ],
+                      "headline-md": [
+                              "EB Garamond"
+                      ],
+                      "headline-lg": [
+                              "EB Garamond"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "headline-lg-mobile": [
+                              "EB Garamond"
+                      ],
+                      "headline-sm": [
+                              "EB Garamond"
+                      ],
+                      "label-md": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "display-lg": [
+                              "42px",
+                              {
+                                      "lineHeight": "48px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "38px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "28px",
+                              {
+                                      "lineHeight": "34px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-sm": [
+                              "20px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "label-md": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        /* Custom scrollbar for horizontal lists */
+        .hide-scroll::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scroll {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        .poster-gradient {
+            background: linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(19,19,19,1) 100%);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen pb-24 font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-white">
+<!-- TopAppBar (Hidden on Mobile, flex on md+) -->
+<header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl dark:bg-surface/80 border-b border-white/5 shadow-2xl flex items-center justify-between px-margin py-sm hidden md:flex">
+<button aria-label="Menu" class="text-on-surface-variant hover:opacity-80 transition-opacity active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-primary dark:text-primary">menu</span>
+</button>
+<h1 class="text-headline-sm font-headline-sm font-bold text-on-surface dark:text-on-surface">Cinéma Avenida</h1>
+<button aria-label="Search" class="text-on-surface-variant hover:opacity-80 transition-opacity active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-primary dark:text-primary">search</span>
+</button>
+</header>
+<!-- Mobile Header (Visible on Mobile) -->
+<header class="md:hidden flex items-center justify-between px-margin py-lg pt-8 z-40 relative">
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold tracking-tight">Cinéma Avenida</h1>
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center border border-white/5">
+<span class="material-symbols-outlined text-on-surface-variant">person</span>
+</div>
+</header>
+<main class="pt-4 md:pt-24 px-margin w-full max-w-7xl mx-auto">
+<!-- Search Bar (Mobile only, as it's in TopApp on desktop) -->
+<div class="md:hidden mb-xl">
+<div class="relative flex items-center w-full bg-surface-container rounded-lg border border-white/5 focus-within:border-primary-container transition-colors duration-300">
+<span class="material-symbols-outlined absolute left-md text-on-surface-variant">search</span>
+<input class="w-full bg-transparent border-none py-md pl-12 pr-md text-body-md font-body-md text-on-surface placeholder:text-on-surface-variant focus:ring-0 rounded-lg" placeholder="Rechercher un film..." type="text">
+</div>
+</div>
+<!-- Section: À l'affiche (Horizontal Scroll) -->
+<section class="mb-xl">
+<h2 class="font-headline-md text-headline-md mb-md text-on-surface">À l'affiche</h2>
+<div class="flex overflow-x-auto gap-gutter hide-scroll pb-sm -mx-margin px-margin snap-x snap-mandatory">
+<!-- Movie Card 1 -->
+<article class="flex-none w-64 md:w-72 lg:w-80 rounded-xl overflow-hidden relative group cursor-pointer snap-center bg-surface-container border border-white/5">
+<div class="w-full h-96 relative">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" data-alt="A highly detailed cinematic poster of a science fiction movie set on a desert planet. Vast sweeping sand dunes under a harsh sun. A lone figure in a stillsuit stands in the foreground, looking towards giant monolithic structures in the distance. The mood is epic, intense, and atmospheric. Premium lighting, high contrast deep blacks, and vibrant orange/crimson accents." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBMweNbRMWqzG0OeUFIoSxDVM0BGnWBVbnyhfrX_sAkJcNrgq6qDaK1tffeD33NHK1hGcML-TH9UJ0bT2-7vGpZCSXdHXfP3TOYNexveewa8jtqZZ07FC0LWDEf9hHXmh54ONR8byu_Htjw4eT_RjZd2lcCarY1eFNhqj63Qr7wdSc3fvAd8GHmCFN1k2AsuC5a7n_H_1J4CW8UkMYBef05cbKlhPcD7doB74Vf0IJcqbI30GnWFhRAsg">
+<div class="absolute inset-0 poster-gradient flex flex-col justify-end p-md">
+<span class="inline-block px-2 py-1 bg-primary-container/90 backdrop-blur-md rounded-DEFAULT text-white font-label-md text-label-md w-max mb-sm border border-white/10 uppercase tracking-widest">Nouveau</span>
+<h3 class="font-headline-sm text-headline-sm text-white drop-shadow-md font-bold">Dune: Deuxième Partie</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Denis Villeneuve</p>
+</div>
+</div>
+</article>
+<!-- Movie Card 2 -->
+<article class="flex-none w-64 md:w-72 lg:w-80 rounded-xl overflow-hidden relative group cursor-pointer snap-center bg-surface-container border border-white/5">
+<div class="w-full h-96 relative">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" data-alt="A moody, stylized cinematic movie poster for a neo-noir thriller. A rain-slicked cyberpunk city street at night, illuminated by neon lights reflecting off puddles. A silhouette of a detective wearing a trench coat stands under a glowing crimson sign. Deep cinematic shadows, gritty texture, high-end visual style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQ4JnSK-ZKcqCUxQSdaX6O7au3slpMeyi-QnVMlrpn6RV6aO6wSP8JDnoFscgwd6pjU8Y14KJifMdf2pMQXfVQuNeKqK9GBqP43wn94FRk4K8Ca7FJEqW6qSMfIsg-9_4roydvncFryshXS57tjs2lUP68j9XwJLTYpY-_PUeiCzmLyZZd5mCXWD3F_reCGU3vtt1BoUUUzbWE6SknwGMdk8y8aKjDo_fk743IsqHuUaPKHrJNZNT2Kw">
+<div class="absolute inset-0 poster-gradient flex flex-col justify-end p-md">
+<h3 class="font-headline-sm text-headline-sm text-white drop-shadow-md font-bold">Blade Runner 2049</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Denis Villeneuve</p>
+</div>
+</div>
+</article>
+<!-- Movie Card 3 -->
+<article class="flex-none w-64 md:w-72 lg:w-80 rounded-xl overflow-hidden relative group cursor-pointer snap-center bg-surface-container border border-white/5">
+<div class="w-full h-96 relative">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" data-alt="A highly detailed cinematic poster of an elegant, suspenseful drama. A dimly lit, opulent 1920s theater interior. A mysterious figure sits alone in the velvet seats. Volumetric light shafts pierce the darkness from the projection booth. Rich crimson velvet textures, deep ebony shadows, and a sophisticated, tense atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1sj9ic0kNp_w0uUW_0mpMuk8emVTFi9_OIa-cMiTUnDUOsm0BKxCGmW2PjWdsC6sKVe3UyYX3ndd_UwbooXylvuuqqz4lY5EKz_r1Rf8UCsgbXF0bKZoKMOc-WTrSbiAQaCck0GwITGkmvI1nqkLi54FlTYK2_KcL_JzfBrpayFb7ecHXu1-P9vxPezt0gXzsDvFKTxHQP_0gWp_1ZFk0qWuvIyaNvKXKv92IIc6UM1s5ByWreik1VQ">
+<div class="absolute inset-0 poster-gradient flex flex-col justify-end p-md">
+<h3 class="font-headline-sm text-headline-sm text-white drop-shadow-md font-bold">L'Illusionniste</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Sylvain Chomet</p>
+</div>
+</div>
+</article>
+</div>
+</section>
+<!-- Section: Cette semaine (Vertical List) -->
+<section>
+<div class="flex items-center justify-between mb-md">
+<h2 class="font-headline-md text-headline-md text-on-surface">Cette semaine</h2>
+<button class="text-primary font-label-md text-label-md uppercase tracking-wider hover:opacity-80 transition-opacity">Tout voir</button>
+</div>
+<div class="flex flex-col gap-md">
+<!-- List Item 1 -->
+<article class="bg-surface-container rounded-xl p-sm flex gap-md border border-white/5 hover:border-white/10 transition-colors">
+<div class="w-24 h-32 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="Close up crop of a cinematic poster for a science fiction movie. High detail desert landscape with deep shadows and strong orange tones. Crimson accents in the typography layout." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDG2skysE5KBW2DP1MstNDqJa-kjXM-0qQ1InEjzEjU6taJHSKuMMsuGxtBvdOERr3XagWgZgAwAKm0gkS1wsIbAmwQNN0Af2AdT0DFllqFTdHSDrC3q5mUm2PYNUM9yOTNthqWKtBiDYL3SyymFcIjy1wv0uLR9CEgG77K9oo9JLq3NIjKZ8sMB5W_LcXnWeCiZiBV668Ut_kqv6ZsrEfDnoPxpa7oyWU10Bxmk7o_8OVJEs4NggBTow">
+</div>
+<div class="flex flex-col flex-grow py-xs justify-between">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold leading-tight">Dune: Part Two</h3>
+<div class="flex items-center gap-sm mt-1 text-on-surface-variant font-body-sm text-body-sm">
+<span class="">Science-Fiction</span>
+<span class="w-1 h-1 rounded-full bg-on-surface-variant/50"></span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span> 2h 46min</span>
+</div>
+</div>
+<div class="flex gap-sm mt-md flex-wrap">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-highest border border-white/10 font-label-md text-label-md text-on-surface hover:bg-primary-container hover:text-white hover:border-primary-container transition-all">18:00</button>
+<button class="px-3 py-1.5 rounded-lg bg-primary-container text-white border border-primary-container font-label-md text-label-md shadow-[0_4px_12px_rgba(178,34,34,0.3)] transition-all">20:30</button>
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-highest border border-white/10 font-label-md text-label-md text-on-surface hover:bg-primary-container hover:text-white hover:border-primary-container transition-all">22:30</button>
+</div>
+</div>
+</article>
+<!-- List Item 2 -->
+<article class="bg-surface-container rounded-xl p-sm flex gap-md border border-white/5 hover:border-white/10 transition-colors">
+<div class="w-24 h-32 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="Close up crop of a cinematic poster for a historical drama. Rich, deep colors, focusing on a character in elaborate period clothing. Moody lighting with high contrast." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCA9K2NzP6trqNNus1vikqYox8quNO2JJNgUFE2cqF7p-1-FOkiF7hBvF7hzne4tsGPRpYOHESNNgaIARwp2P3NTXUBMt1UVd33kiUEBuWrSUrV1uj8uS2vHM-bJXOZKaWCc_d1eFAMo4yTHgRtJeriZJpCxE7hC-ecT1Djnd24aBtu-njI2rNzn1UtszG99r5ecSiTaPzpweCPi-JbCBUagZmLMZxvWhzpC9m_JLDq5vm3JHZHorQYLQ">
+</div>
+<div class="flex flex-col flex-grow py-xs justify-between">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold leading-tight">Oppenheimer</h3>
+<div class="flex items-center gap-sm mt-1 text-on-surface-variant font-body-sm text-body-sm">
+<span class="">Biopic, Drame</span>
+<span class="w-1 h-1 rounded-full bg-on-surface-variant/50"></span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span> 3h 00min</span>
+</div>
+</div>
+<div class="flex gap-sm mt-md flex-wrap">
+<button class="px-3 py-1.5 rounded-lg bg-surface-container-highest border border-white/10 font-label-md text-label-md text-on-surface hover:bg-primary-container hover:text-white hover:border-primary-container transition-all">19:15</button>
+</div>
+</div>
+</article>
+</div>
+</section>
+</main>
+<!-- BottomNavBar (Visible on Mobile, hidden on md+) -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 bg-surface/80 backdrop-blur-xl dark:bg-surface/80 shadow-[0_-8px_32px_rgba(0,0,0,0.5)] flex justify-around items-center h-16 px-margin pb-safe">
+<!-- Active Tab: Accueil -->
+<a class="flex flex-col items-center justify-center text-primary font-bold hover:text-primary/80 transition-colors active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="text-label-md font-label-md mt-1">Accueil</span>
+</a>
+<!-- Inactive Tab: Mes Billets -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary/80 transition-colors active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined">confirmation_number</span>
+<span class="text-label-md font-label-md mt-1">Mes Billets</span>
+</a>
+<!-- Inactive Tab: Profil -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary/80 transition-colors active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-label-md font-label-md mt-1">Profil</span>
+</a>
+</nav>
+
+
+</body></html>

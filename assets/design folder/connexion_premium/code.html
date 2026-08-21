@@ -1,0 +1,195 @@
+<!DOCTYPE html><html class="dark" lang="fr" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Cinéma Avenida - Connexion</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-fixed-variant": "#474746",
+                        "on-tertiary-container": "#b1daff",
+                        "secondary-container": "#474746",
+                        "outline-variant": "#5a403e",
+                        "error": "#ffb4ab",
+                        "secondary-fixed": "#e5e2e1",
+                        "on-error": "#690005",
+                        "surface-container": "#201f1f",
+                        "on-surface-variant": "#e2beba",
+                        "on-primary-fixed-variant": "#92030f",
+                        "primary-fixed-dim": "#ffb4ac",
+                        "tertiary-fixed-dim": "#8fcdff",
+                        "on-secondary": "#313030",
+                        "tertiary-container": "#006292",
+                        "primary-fixed": "#ffdad6",
+                        "outline": "#aa8986",
+                        "on-primary": "#690007",
+                        "inverse-surface": "#e5e2e1",
+                        "on-error-container": "#ffdad6",
+                        "on-background": "#e5e2e1",
+                        "inverse-primary": "#b52424",
+                        "surface-container-high": "#2a2a2a",
+                        "on-secondary-container": "#b7b5b4",
+                        "surface": "#131313",
+                        "on-surface": "#e5e2e1",
+                        "primary-container": "#b22222",
+                        "surface-container-low": "#1c1b1b",
+                        "surface-container-highest": "#353534",
+                        "on-tertiary-fixed-variant": "#004b71",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "tertiary": "#8fcdff",
+                        "surface-tint": "#ffb4ac",
+                        "primary": "#ffb4ac",
+                        "surface-container-lowest": "#0e0e0e",
+                        "error-container": "#93000a",
+                        "on-primary-container": "#ffc8c2",
+                        "surface-bright": "#3a3939",
+                        "on-primary-fixed": "#410003",
+                        "on-tertiary": "#003450",
+                        "background": "#131313",
+                        "secondary": "#c8c6c5",
+                        "on-tertiary-fixed": "#001e30",
+                        "surface-dim": "#131313",
+                        "inverse-on-surface": "#313030",
+                        "surface-variant": "#353534",
+                        "on-secondary-fixed": "#1c1b1b",
+                        "tertiary-fixed": "#cbe6ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "unit": "4px",
+                        "xs": "4px",
+                        "xl": "32px",
+                        "margin": "20px",
+                        "md": "16px",
+                        "gutter": "16px",
+                        "lg": "24px"
+                    },
+                    "fontFamily": {
+                        "display-lg": ["EB Garamond"],
+                        "headline-md": ["EB Garamond"],
+                        "headline-lg": ["EB Garamond"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-lg-mobile": ["EB Garamond"],
+                        "headline-sm": ["EB Garamond"],
+                        "label-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "display-lg": ["42px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "headline-md": ["24px", { "lineHeight": "28px", "fontWeight": "500" }],
+                        "headline-lg": ["32px", { "lineHeight": "38px", "fontWeight": "500" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["28px", { "lineHeight": "34px", "fontWeight": "500" }],
+                        "headline-sm": ["20px", { "lineHeight": "24px", "fontWeight": "500" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #131313; /* Surface */
+            color: #e5e2e1; /* on-background */
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+        }
+
+        .input-field {
+            background: #2a2a2a; /* surface-container-high */
+            border: 1px solid transparent;
+            color: #e5e2e1;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .input-field:focus {
+            outline: none;
+            border-color: #b22222; /* Crimson accent */
+            box-shadow: 0 0 0 1px #b22222;
+        }
+        
+        .btn-primary {
+            background-color: #b22222; /* Crimson */
+            color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+            background-color: #c92a2a;
+        }
+        
+        .btn-primary:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen items-center justify-center p-margin relative overflow-hidden">
+<!-- Cinematic Top Half Background -->
+<div class="absolute top-0 w-full h-[60vh] z-0 pointer-events-none" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDAWRtnZFkUEiSR3w_tkgCcfIPLgn2Sdo11tShxNbtf4_PahaXf_y8NXi1qfyCDr3VhoiBiSLpGwrWwOhLeGH1islJFstYTkiBevSTGUX1c7PbCzIEFz5BF2AZqJUOlaoiXYVyN1jxXKyuYisHxEJFpEAyznbhLLOXEFf10UAq6B3y-HP57XccB2Z7ru839Fpw-ZbOPVRXyDTjEtpy6F5My89FdjrkEO-PBak1I0zlrcsg6adIyM0ELZw'); background-size: cover; background-position: center top;">
+<div class="absolute inset-0 bg-gradient-to-b from-black/40 via-surface/80 to-surface"></div>
+</div>
+<main class="w-full max-w-md z-10 flex flex-col items-center pt-8">
+<!-- Logo Header -->
+<div class="mb-xl text-center w-full flex flex-col items-center">
+<div class="w-40 h-40 mb-sm relative">
+<img alt="Cinéma Avenida Logo" class="w-full h-full object-contain drop-shadow-2xl" src="https://lh3.googleusercontent.com/aida/AP1WRLtF64SaqxTMk1rnFFSegU06rBWyUgHbjV6jxUMMQPWq4RGMma0qlrms1Bp4qO6rSJgAt1MBGuAuIo6-iLcaFZHvBIVjwySLnYWj1KL360bxRz5d5Jl-JWttEQu4VydxsvqITu6bnAFZa9o1z88eCzdXIkpuMtUsnAIFt0UHz-4yTYCOGFWVmH9Ui7madNnSYUX-33FktSxAQf1s_kaEUBnL_zZEmVGg6OUHsL3aSoYmFFucJRuhLRMuME1N" style="background-color: transparent; mix-blend-mode: multiply;">
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant text-center opacity-90 drop-shadow-md">Votre salle, vos séances.</p>
+</div>
+<!-- Login Form Glass Panel -->
+<form class="bg-surface/60 backdrop-blur-lg border border-white/5 w-full rounded-xl p-lg md:p-xl flex flex-col gap-lg shadow-2xl relative overflow-hidden">
+<div class="flex flex-col gap-sm relative z-10">
+<label class="font-label-md text-label-md text-on-surface-variant uppercase tracking-widest" for="email">Email</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-primary-container/80">mail</span>
+<input class="input-field w-full py-2.5 pl-11 pr-4 rounded-lg font-body-md text-body-md placeholder-on-surface-variant/40 bg-white/5 backdrop-blur-lg" id="email" name="email" placeholder="votre@email.com" required="" type="email" style="background-color: transparent;">
+</div>
+</div>
+<div class="flex flex-col gap-sm relative z-10">
+<div class="flex justify-between items-center">
+<label class="font-label-md text-label-md text-on-surface-variant uppercase tracking-widest" for="password">Mot de passe</label>
+<a class="font-label-md text-label-md text-on-surface-variant/70 hover:text-on-surface transition-colors" href="#">Oublié ?</a>
+</div>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-primary-container/80">lock</span>
+<input class="input-field w-full py-2.5 pl-11 pr-11 rounded-lg font-body-md text-body-md placeholder-on-surface-variant/40 bg-white/5 backdrop-blur-lg" id="password" name="password" placeholder="••••••••" required="" type="password" style="background-color: transparent;">
+<button class="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 hover:text-on-surface transition-colors focus:outline-none" type="button">
+<span class="material-symbols-outlined text-[20px]">visibility_off</span>
+</button>
+</div>
+</div>
+<button class="btn-primary w-full py-3 mt-sm rounded-lg font-body-lg text-body-lg font-bold flex justify-center items-center gap-sm relative z-10 group" type="submit">
+                Se connecter
+                <span class="material-symbols-outlined group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</button>
+</form>
+<!-- Footer Links -->
+<div class="mt-xl text-center z-10">
+<p class="font-body-md text-body-md text-on-surface-variant">
+                Pas encore de compte ? 
+                <a class="text-primary-container hover:text-primary font-medium transition-colors ml-1 underline decoration-primary-container/30 hover:decoration-primary underline-offset-4" href="#">S'inscrire</a>
+</p>
+</div>
+</main>
+
+
+</body></html>

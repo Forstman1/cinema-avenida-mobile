@@ -1,0 +1,271 @@
+<!DOCTYPE html><html class="dark" lang="fr" style="width: 390px; height: 732px; overflow: hidden; position: relative;"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Gestion des Films - Cinéma Avenida</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-secondary-fixed-variant": "#474746",
+                      "on-tertiary-container": "#b1daff",
+                      "secondary-container": "#474746",
+                      "outline-variant": "#5a403e",
+                      "error": "#ffb4ab",
+                      "secondary-fixed": "#e5e2e1",
+                      "on-error": "#690005",
+                      "surface-container": "#201f1f",
+                      "on-surface-variant": "#e2beba",
+                      "on-primary-fixed-variant": "#92030f",
+                      "primary-fixed-dim": "#ffb4ac",
+                      "tertiary-fixed-dim": "#8fcdff",
+                      "on-secondary": "#313030",
+                      "tertiary-container": "#006292",
+                      "primary-fixed": "#ffdad6",
+                      "outline": "#aa8986",
+                      "on-primary": "#690007",
+                      "inverse-surface": "#e5e2e1",
+                      "on-error-container": "#ffdad6",
+                      "on-background": "#e5e2e1",
+                      "inverse-primary": "#b52424",
+                      "surface-container-high": "#2a2a2a",
+                      "on-secondary-container": "#b7b5b4",
+                      "surface": "#131313",
+                      "on-surface": "#e5e2e1",
+                      "primary-container": "#b22222",
+                      "surface-container-low": "#1c1b1b",
+                      "surface-container-highest": "#353534",
+                      "on-tertiary-fixed-variant": "#004b71",
+                      "secondary-fixed-dim": "#c8c6c5",
+                      "tertiary": "#8fcdff",
+                      "surface-tint": "#ffb4ac",
+                      "primary": "#ffb4ac",
+                      "surface-container-lowest": "#0e0e0e",
+                      "error-container": "#93000a",
+                      "on-primary-container": "#ffc8c2",
+                      "surface-bright": "#3a3939",
+                      "on-primary-fixed": "#410003",
+                      "on-tertiary": "#003450",
+                      "background": "#131313",
+                      "secondary": "#c8c6c5",
+                      "on-tertiary-fixed": "#001e30",
+                      "surface-dim": "#131313",
+                      "inverse-on-surface": "#313030",
+                      "surface-variant": "#353534",
+                      "on-secondary-fixed": "#1c1b1b",
+                      "tertiary-fixed": "#cbe6ff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "sm": "8px",
+                      "unit": "4px",
+                      "xs": "4px",
+                      "xl": "32px",
+                      "margin": "20px",
+                      "md": "16px",
+                      "gutter": "16px",
+                      "lg": "24px"
+              },
+              "fontFamily": {
+                      "display-lg": [
+                              "EB Garamond"
+                      ],
+                      "headline-md": [
+                              "EB Garamond"
+                      ],
+                      "headline-lg": [
+                              "EB Garamond"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "headline-lg-mobile": [
+                              "EB Garamond"
+                      ],
+                      "headline-sm": [
+                              "EB Garamond"
+                      ],
+                      "label-md": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "display-lg": [
+                              "42px",
+                              {
+                                      "lineHeight": "48px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "38px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "28px",
+                              {
+                                      "lineHeight": "34px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-sm": [
+                              "20px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "label-md": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .level-1-card {
+            background-color: #1A1A1A;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .text-shadow-subtle {
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+      </style>
+</head>
+<body class="bg-background text-on-background antialiased min-h-screen flex flex-col hide-scrollbar relative">
+<!-- Top App Bar (Modified for "Back" intent) -->
+<header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl dark:bg-surface/80 shadow-2xl flex items-center justify-between px-margin py-sm">
+<button class="text-primary dark:text-primary hover:opacity-80 transition-opacity active:scale-95 transition-transform flex items-center justify-center p-2 rounded-full">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">arrow_back</span>
+</button>
+<h1 class="text-headline-sm font-headline-sm font-bold text-on-surface dark:text-on-surface text-center flex-1 pr-10">Gestion des Films</h1>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 mt-[72px] pb-[100px] px-margin md:max-w-3xl md:mx-auto w-full">
+<div class="space-y-sm mt-md">
+<!-- Movie Item 1 -->
+<div class="level-1-card rounded-xl p-md flex items-center gap-md hover:bg-surface-container-high transition-colors group">
+<div class="w-16 h-24 rounded-lg overflow-hidden shrink-0 shadow-lg relative">
+<img class="w-full h-full object-cover" data-alt="A cinematic movie poster for a dramatic film, deep blues and shadowy lighting, moody and intense atmosphere, highly detailed, textless artwork. Cinematic framing." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCGJkcxMQGC_pQqJwUeT6QL87roRLiTjSvtvFUV8hxzPm9umO1_CCkKzgZeJHHxam2eal05Wz3fwLub_j_ce0v8-nAVL_80AKqaxeltpZL_neT72SbC1aZ8XZdKXHqLHPaqSS8iyiQu4zWF3jxwk3QUt-IJ2TaL3BxtuRctjpUhJw2XKoi80i26MPGBGvYKV9OUQqBmf68OkS3lwGqtyAQyugauAs29Omhbaetkewyb8ehODJvtWO9Sjg">
+</div>
+<div class="flex-1 min-w-0">
+<h2 class="text-body-lg font-body-lg text-on-surface truncate font-semibold">Le Crépuscule des Dieux</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant truncate">Salle 1 • 18h00, 20h30</p>
+</div>
+<button class="shrink-0 bg-transparent border-[1.5px] border-white/20 text-on-surface rounded-full px-4 py-2 text-label-md font-label-md hover:border-primary-container hover:text-primary-container transition-colors active:scale-95">
+                    Modifier
+                </button>
+</div>
+<!-- Movie Item 2 -->
+<div class="level-1-card rounded-xl p-md flex items-center gap-md hover:bg-surface-container-high transition-colors group">
+<div class="w-16 h-24 rounded-lg overflow-hidden shrink-0 shadow-lg relative">
+<img class="w-full h-full object-cover" data-alt="A stylized movie poster for an indie romance, warm golden hour lighting, soft focus, intimate feeling, beautiful color grading, textless artwork. Cinematic composition." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDC-tGgOm1B9NnPmmYaMNpZFMg6Wpx-a7_i19MN0CflJmV9VgsjPs8-2wYxbJr4IMOtockX6MqfW7MdUMDIjZp1qGAygpCIes3GOxLPs_VYXmFS__qBhMrAYZlSOqjvJaPtl2pf7Dc5sLyPRD0zwSBMleTGnAU7mop6miBUvjEjHmjP-RXNmN1uWAeXolVZLrRR2u-m4DODJsuO4__y_d1h47HtXxKT34T-pZ4qDPRGFwYOfiXBmBx3wA">
+</div>
+<div class="flex-1 min-w-0">
+<h2 class="text-body-lg font-body-lg text-on-surface truncate font-semibold">L'Écho du Vent</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant truncate">Salle 1 • 20h30</p>
+</div>
+<button class="shrink-0 bg-transparent border-[1.5px] border-white/20 text-on-surface rounded-full px-4 py-2 text-label-md font-label-md hover:border-primary-container hover:text-primary-container transition-colors active:scale-95">
+                    Modifier
+                </button>
+</div>
+<!-- Movie Item 3 -->
+<div class="level-1-card rounded-xl p-md flex items-center gap-md hover:bg-surface-container-high transition-colors group">
+<div class="w-16 h-24 rounded-lg overflow-hidden shrink-0 shadow-lg relative">
+<img class="w-full h-full object-cover" data-alt="A thrilling sci-fi movie poster, neon glowing accents, dark futuristic city background, sleek and modern aesthetic, high contrast, textless artwork. Masterpiece." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBy59DOoaoAg2X-i_AC9J7xfrWvylk3KKa0zWeu_Cqj6EaL3Qbf9hBPH2buBhE-oO98GBTGS7fvcRkDXfzFOZsQTKu5RezqqfaWKx55hR-tbZiGW7d9UMSmBxJrmjeVGIn2RGc2vAhq7JqYN66tYRPfuPDGMnT-MaEFYUbEsOG_5IohrAqgDVaE92dgVvxQfA0Dx-E5H4L6Ps5eVjueVb1QDC62qMxL1a0yB65MmzgY8srv0aONgZEIUg">
+</div>
+<div class="flex-1 min-w-0">
+<h2 class="text-body-lg font-body-lg text-on-surface truncate font-semibold">Néostrata 2099</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant truncate">Salle 1 • 18h00, 20h30, 22h30</p>
+</div>
+<button class="shrink-0 bg-transparent border-[1.5px] border-white/20 text-on-surface rounded-full px-4 py-2 text-label-md font-label-md hover:border-primary-container hover:text-primary-container transition-colors active:scale-95">
+                    Modifier
+                </button>
+</div>
+<!-- Movie Item 4 -->
+<div class="level-1-card rounded-xl p-md flex items-center gap-md hover:bg-surface-container-high transition-colors group opacity-60">
+<div class="w-16 h-24 rounded-lg overflow-hidden shrink-0 shadow-lg relative grayscale">
+<img class="w-full h-full object-cover" data-alt="A vintage classic movie poster style, black and white noir aesthetic, moody lighting, smoke and shadows, textless artwork. High cinematic quality." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCi-0afcLkdgp4wksPRkrzrep59-BXNNm7oBEwJ3megqDNBoiYG24zaXLlN-r-3iBg8rdrtQ17I5qxnwXq2sD2MeGskbj85NKFZ6Banm7Stca8DIkpIBkgTN2Dnyyg0N0B9YwZkT7D97kXufci8z-KHUshp6PTHwst0iwR3hz6U07_Eg682PSrxBwJQ1v6kCDX-1mcimZCitzmEmqH_i3Tsj_DFo_RfS1stUlOmxm7hxayFfxr-KV_4PA">
+</div>
+<div class="flex-1 min-w-0">
+<h2 class="text-body-lg font-body-lg text-on-surface truncate font-semibold">Minuit à Paris</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant truncate">Terminé</p>
+</div>
+<button class="shrink-0 bg-transparent border-[1.5px] border-white/10 text-on-surface-variant rounded-full px-4 py-2 text-label-md font-label-md hover:border-white/30 transition-colors active:scale-95">
+                    Archiver
+                </button>
+</div>
+</div>
+</main>
+<!-- Floating Action Button -->
+<button class="fixed bottom-lg right-margin z-50 bg-primary-container text-white w-14 h-14 rounded-full flex items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.5)] hover:bg-inverse-primary transition-colors active:scale-90">
+<span class="material-symbols-outlined text-[32px]" style="font-variation-settings: 'FILL' 1;">add</span>
+</button>
+<!-- Navigation suppressed due to task-focused linear/management intent with back button -->
+</body></html>

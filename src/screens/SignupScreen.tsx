@@ -1,13 +1,21 @@
 import React, { useState } from 'react';
 import {
+  ImageBackground,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { MaterialIcons } from '@expo/vector-icons';
+
 import { useAuth } from '../context/AuthContext';
 import type { SignupScreenProps } from '../types/navigation';
 
@@ -15,10 +23,13 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
   const [error, setError] = useState('');
   const { signup } = useAuth();
 
   const handleSignup = async () => {
+    Keyboard.dismiss();
     if (!name.trim() || !email.trim() || !password) {
       setError('Veuillez remplir tous les champs.');
       return;
@@ -32,100 +43,338 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+    <ImageBackground
+      source={require('../../assets/auth-background.png')}
+      style={styles.background}
+      resizeMode="cover"
     >
-      <View style={styles.inner}>
-        <Text style={styles.logo}>Cinéma Avenida</Text>
+      <LinearGradient
+        colors={['rgba(0,0,0,0.4)', 'rgba(19,19,19,0.8)', '#131313']}
+        locations={[0, 0.45, 0.75]}
+        style={styles.gradient}
+      />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Nom"
-          placeholderTextColor="#888"
-          value={name}
-          onChangeText={setName}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#888"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={email}
-          onChangeText={setEmail}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Mot de passe"
-          placeholderTextColor="#888"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <TouchableOpacity style={styles.button} onPress={handleSignup}>
-          <Text style={styles.buttonText}>S'inscrire</Text>
+      {/* Header back button */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          hitSlop={16}
+        >
+          <MaterialIcons name="arrow-back" size={24} color="#e2beba" />
         </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-          <Text style={styles.link}>Déjà un compte ? Se connecter</Text>
-        </TouchableOpacity>
+        <View style={styles.headerSpacer} />
       </View>
-    </KeyboardAvoidingView>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboard}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Branding / Hero */}
+          <View style={styles.brand}>
+            <Text style={styles.title}>Cinéma Avenida</Text>
+            <Text style={styles.subtitle}>Rejoignez le club des cinéphiles.</Text>
+          </View>
+
+          {/* Glass form card */}
+          <BlurView intensity={20} tint="dark" style={styles.card}>
+            <View style={styles.cardHighlight} />
+
+            <View style={styles.field}>
+              <Text
+                style={[
+                  styles.label,
+                  focusedField === 'name' && styles.labelFocused,
+                ]}
+              >
+                Nom complet
+              </Text>
+              <View
+                style={[
+                  styles.inputRow,
+                  focusedField === 'name' && styles.inputRowFocused,
+                ]}
+              >
+                <MaterialIcons
+                  name="person-outline"
+                  size={20}
+                  color="#aa8986"
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Jean Dupont"
+                  placeholderTextColor="rgba(229,226,225,0.5)"
+                  value={name}
+                  onChangeText={setName}
+                  onFocus={() => setFocusedField('name')}
+                  onBlur={() => setFocusedField(null)}
+                />
+              </View>
+            </View>
+
+            <View style={styles.field}>
+              <Text
+                style={[
+                  styles.label,
+                  focusedField === 'email' && styles.labelFocused,
+                ]}
+              >
+                Email
+              </Text>
+              <View
+                style={[
+                  styles.inputRow,
+                  focusedField === 'email' && styles.inputRowFocused,
+                ]}
+              >
+                <MaterialIcons
+                  name="mail-outline"
+                  size={20}
+                  color="#aa8986"
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="jean@exemple.com"
+                  placeholderTextColor="rgba(229,226,225,0.5)"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={email}
+                  onChangeText={setEmail}
+                  onFocus={() => setFocusedField('email')}
+                  onBlur={() => setFocusedField(null)}
+                />
+              </View>
+            </View>
+
+            <View style={styles.field}>
+              <Text
+                style={[
+                  styles.label,
+                  focusedField === 'password' && styles.labelFocused,
+                ]}
+              >
+                Mot de passe
+              </Text>
+              <View
+                style={[
+                  styles.inputRow,
+                  focusedField === 'password' && styles.inputRowFocused,
+                ]}
+              >
+                <MaterialIcons
+                  name="lock-outline"
+                  size={20}
+                  color="#aa8986"
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="••••••••"
+                  placeholderTextColor="rgba(229,226,225,0.5)"
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={setPassword}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField(null)}
+                />
+                <Pressable
+                  onPress={() => setShowPassword((prev) => !prev)}
+                  hitSlop={8}
+                >
+                  <MaterialIcons
+                    name={showPassword ? 'visibility' : 'visibility-off'}
+                    size={20}
+                    color="#aa8986"
+                  />
+                </Pressable>
+              </View>
+            </View>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <TouchableOpacity
+              style={styles.button}
+              onPress={handleSignup}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.buttonText}>S'inscrire</Text>
+              <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+            </TouchableOpacity>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Déjà membre ? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                <Text style={styles.footerLink}>Se connecter</Text>
+              </TouchableOpacity>
+            </View>
+          </BlurView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  background: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: '#131313',
   },
-  inner: {
+  gradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 48,
+    zIndex: 10,
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  keyboard: {
     flex: 1,
+  },
+  scroll: {
+    flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 24,
+    paddingBottom: 40,
+    paddingTop: 100,
   },
-  logo: {
-    color: '#e50914',
-    fontSize: 32,
-    fontWeight: 'bold',
+  brand: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  title: {
+    fontFamily: 'EBGaramond-SemiBold',
+    fontSize: 36,
+    color: '#e5e2e1',
     textAlign: 'center',
-    marginBottom: 48,
+    marginBottom: 6,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  subtitle: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 16,
+    color: '#e2beba',
+    textAlign: 'center',
+  },
+  card: {
+    backgroundColor: 'rgba(19,19,19,0.6)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    padding: 24,
+    gap: 20,
+    overflow: 'hidden',
+  },
+  cardHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  field: {
+    gap: 6,
+  },
+  label: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 12,
+    letterSpacing: 0.6,
+    color: '#e2beba',
+  },
+  labelFocused: {
+    color: '#b22222',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(32,31,31,0.8)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
+  inputRowFocused: {
+    borderColor: '#b22222',
+  },
+  inputIcon: {
+    marginRight: 10,
   },
   input: {
-    backgroundColor: '#1c1c1c',
-    color: '#fff',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
+    flex: 1,
+    fontFamily: 'Inter-Regular',
     fontSize: 16,
-  },
-  button: {
-    backgroundColor: '#e50914',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#e5e2e1',
+    paddingVertical: 12,
   },
   error: {
-    color: '#ff4d4d',
-    marginBottom: 12,
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    color: '#ffb4ab',
     textAlign: 'center',
   },
-  link: {
-    color: '#aaa',
-    marginTop: 20,
-    textAlign: 'center',
+  button: {
+    backgroundColor: '#b22222',
+    borderRadius: 10,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 4,
+    shadowColor: 'rgba(178,34,34,0.3)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 32,
+    elevation: 8,
+  },
+  buttonText: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 16,
+    color: '#fff',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  footerText: {
+    fontFamily: 'Inter-Regular',
     fontSize: 14,
+    color: '#e2beba',
+  },
+  footerLink: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    color: '#ffb4ac',
+    textDecorationLine: 'underline',
+    textDecorationColor: 'rgba(255,180,172,0.3)',
   },
 });

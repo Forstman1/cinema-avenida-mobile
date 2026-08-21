@@ -1,0 +1,227 @@
+<!DOCTYPE html><html class="dark" lang="fr" style="width: 390px; height: 1017px; overflow: hidden; position: relative;"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Mes Billets - Cinéma Avenida</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&amp;family=Inter:wght@100..900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-fixed-variant": "#474746",
+                        "on-tertiary-container": "#b1daff",
+                        "secondary-container": "#474746",
+                        "outline-variant": "#5a403e",
+                        "error": "#ffb4ab",
+                        "secondary-fixed": "#e5e2e1",
+                        "on-error": "#690005",
+                        "surface-container": "#201f1f",
+                        "on-surface-variant": "#e2beba",
+                        "on-primary-fixed-variant": "#92030f",
+                        "primary-fixed-dim": "#ffb4ac",
+                        "tertiary-fixed-dim": "#8fcdff",
+                        "on-secondary": "#313030",
+                        "tertiary-container": "#006292",
+                        "primary-fixed": "#ffdad6",
+                        "outline": "#aa8986",
+                        "on-primary": "#690007",
+                        "inverse-surface": "#e5e2e1",
+                        "on-error-container": "#ffdad6",
+                        "on-background": "#e5e2e1",
+                        "inverse-primary": "#b52424",
+                        "surface-container-high": "#2a2a2a",
+                        "on-secondary-container": "#b7b5b4",
+                        "surface": "#131313",
+                        "on-surface": "#e5e2e1",
+                        "primary-container": "#b22222",
+                        "surface-container-low": "#1c1b1b",
+                        "surface-container-highest": "#353534",
+                        "on-tertiary-fixed-variant": "#004b71",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "tertiary": "#8fcdff",
+                        "surface-tint": "#ffb4ac",
+                        "primary": "#ffb4ac",
+                        "surface-container-lowest": "#0e0e0e",
+                        "error-container": "#93000a",
+                        "on-primary-container": "#ffc8c2",
+                        "surface-bright": "#3a3939",
+                        "on-primary-fixed": "#410003",
+                        "on-tertiary": "#003450",
+                        "background": "#131313",
+                        "secondary": "#c8c6c5",
+                        "on-tertiary-fixed": "#001e30",
+                        "surface-dim": "#131313",
+                        "inverse-on-surface": "#313030",
+                        "surface-variant": "#353534",
+                        "on-secondary-fixed": "#1c1b1b",
+                        "tertiary-fixed": "#cbe6ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "unit": "4px",
+                        "xs": "4px",
+                        "xl": "32px",
+                        "margin": "20px",
+                        "md": "16px",
+                        "gutter": "16px",
+                        "lg": "24px"
+                    },
+                    "fontFamily": {
+                        "display-lg": ["EB Garamond"],
+                        "headline-md": ["EB Garamond"],
+                        "headline-lg": ["EB Garamond"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-lg-mobile": ["EB Garamond"],
+                        "headline-sm": ["EB Garamond"],
+                        "label-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "display-lg": ["42px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "headline-md": ["24px", { "lineHeight": "28px", "fontWeight": "500" }],
+                        "headline-lg": ["32px", { "lineHeight": "38px", "fontWeight": "500" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["28px", { "lineHeight": "34px", "fontWeight": "500" }],
+                        "headline-sm": ["20px", { "lineHeight": "24px", "fontWeight": "500" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #0A0A0A;
+        }
+        .glass-card {
+            background: rgba(26, 26, 26, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .nav-shell-blur {
+            background: rgba(19, 19, 19, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col pt-[72px] pb-[80px]">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl dark:bg-surface/80 border-b border-white/5 shadow-2xl flex items-center justify-between px-margin py-sm w-full">
+<button class="text-primary dark:text-primary hover:opacity-80 transition-opacity active:scale-95 transition-transform p-2 rounded-full">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<h1 class="text-headline-sm font-headline-sm font-bold text-on-surface dark:text-on-surface">Cinéma Avenida</h1>
+<button class="text-primary dark:text-primary hover:opacity-80 transition-opacity active:scale-95 transition-transform p-2 rounded-full">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</button>
+</header>
+<main class="flex-grow px-margin py-xl max-w-4xl mx-auto w-full">
+<div class="mb-xl">
+<h2 class="text-headline-lg font-headline-lg mb-md">Mes Billets</h2>
+<!-- Tabs -->
+<div class="flex gap-md border-b border-white/10 mb-lg">
+<button class="pb-sm border-b-2 border-primary-container text-on-surface font-label-md text-label-md px-sm uppercase tracking-wider">À venir</button>
+<button class="pb-sm border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors font-label-md text-label-md px-sm uppercase tracking-wider">Historique</button>
+</div>
+</div>
+<!-- Upcoming Section -->
+<section class="space-y-gutter mb-xl">
+<!-- Ticket Card 1 -->
+<div class="glass-card rounded-xl overflow-hidden flex flex-col md:flex-row shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+<div class="w-full md:w-1/3 h-48 md:h-auto relative">
+<img class="absolute inset-0 w-full h-full object-cover" data-alt="A highly atmospheric cinematic still of a futuristic sci-fi movie scene. The lighting is dramatic, high-contrast, utilizing deep shadows and stark neon accents of red and blue against a predominantly dark, gritty urban backdrop. The overall aesthetic is aligned with a premium, immersive dark-mode cinema experience, evocative of classic cyberpunk." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBW_2DVT1ULHPqnjSE2q2wxsbQJ8nXefxBgMYJ5pWnTPDpUEDDO5ziolowR1DMKwlYJdwr9y_m64sL56rfCdvCiyT0rHa5pLnzAdzwc77JkwbeoXQ40eYgruoUnzovqYXrrOIei63ZcRfHHCvQr0JSCOQM_TFyYSeJ6u5suYZIE3rME9ZuwZFM5i2KnieyghMxxx6-5A3Mb7q9q1uffCvOGbDULOJfHPKCIIPzs1F9jEQccthD6y6DwTQ">
+<div class="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent md:bg-gradient-to-r"></div>
+</div>
+<div class="p-md md:w-2/3 flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start mb-sm">
+<h3 class="text-headline-sm font-headline-sm">Dune: Deuxième Partie</h3>
+<span class="bg-surface-container-low px-2 py-1 rounded-DEFAULT text-label-md font-label-md text-on-surface-variant">Salle 1</span>
+</div>
+<div class="flex gap-lg text-body-sm font-body-sm text-on-surface-variant mb-md">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">calendar_month</span>
+<span class="">Ven 24 Nov</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">schedule</span>
+<span class="">20:30</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">chair</span>
+<span class="">Rangée F, 12-13</span>
+</div>
+</div>
+</div>
+<div class="flex gap-sm mt-md">
+<button class="flex-1 bg-primary-container text-white font-body-md text-body-md py-2 px-4 rounded-DEFAULT hover:bg-primary-container/90 transition-colors">Voir le billet</button>
+<button class="flex-1 border-1.5 border-white/20 bg-transparent text-on-surface font-body-md text-body-md py-2 px-4 rounded-DEFAULT hover:bg-white/5 transition-colors">Annuler</button>
+</div>
+</div>
+</div>
+<!-- Ticket Card 2 -->
+<div class="glass-card rounded-xl overflow-hidden flex flex-col md:flex-row shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+<div class="w-full md:w-1/3 h-48 md:h-auto relative">
+<img class="absolute inset-0 w-full h-full object-cover" data-alt="A visually striking scene from an intense psychological thriller. The lighting is moody and low-key, with a focus on deep blacks and subtle, unsettling green or amber highlights. The atmosphere is tense and mysterious, perfectly suiting a sophisticated, dark-themed premium cinema application. The imagery relies on shadows and minimal illumination to create depth." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAF9HOAoonBzgA8D4DI3-Tfewyh5nK4v2z7aBVd6fT1-5fbtz4rg1w_h72WMAJhqf0Qg3nOqbb-sQsfFcHWULEoZ98jOZGlqAzX4kqyuVAslTzookVbQPo5EP7haUBZzco5CT6lHyJ4R53tstUMH90QMH7wLylBUaLeWZ0tEHq6vo_ls9q-Wt5L0T83ce295Jq6wF2VBClMUSlIz2h1XyZEXF2hTgOBQ3iXnpLADzxVY4yjva59w0LI5g">
+<div class="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent md:bg-gradient-to-r"></div>
+</div>
+<div class="p-md md:w-2/3 flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start mb-sm">
+<h3 class="text-headline-sm font-headline-sm">Killers of the Flower Moon</h3>
+<span class="bg-surface-container-low px-2 py-1 rounded-DEFAULT text-label-md font-label-md text-on-surface-variant">Salle 1</span>
+</div>
+<div class="flex gap-lg text-body-sm font-body-sm text-on-surface-variant mb-md">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">calendar_month</span>
+<span class="">Dim 26 Nov</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">schedule</span>
+<span class="">20:30</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">chair</span>
+<span class="">Rangée H, 8</span>
+</div>
+</div>
+</div>
+<div class="flex gap-sm mt-md">
+<button class="flex-1 bg-primary-container text-white font-body-md text-body-md py-2 px-4 rounded-DEFAULT hover:bg-primary-container/90 transition-colors">Voir le billet</button>
+<button class="flex-1 border-1.5 border-white/20 bg-transparent text-on-surface font-body-md text-body-md py-2 px-4 rounded-DEFAULT hover:bg-white/5 transition-colors">Annuler</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 bg-surface/80 backdrop-blur-xl dark:bg-surface/80 shadow-[0_-8px_32px_rgba(0,0,0,0.5)] flex justify-around items-center h-16 px-margin pb-safe md:hidden">
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary/80 transition-colors active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="text-label-md font-label-md mt-1">Accueil</span>
+</button>
+<button class="flex flex-col items-center justify-center text-primary font-bold hover:text-primary/80 transition-colors active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="confirmation_number" style="font-variation-settings: 'FILL' 1;">confirmation_number</span>
+<span class="text-label-md font-label-md mt-1">Mes Billets</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary/80 transition-colors active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="text-label-md font-label-md mt-1">Profil</span>
+</button>
+</nav>
+</body></html>
