@@ -50,11 +50,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(newUser);
   };
 
+  const parseAuthResponse = (data: any): { token: string; user: User } | null => {
+    const token = data?.token ?? data?.accessToken ?? data?.authToken;
+    const user = data?.user ?? data?.utilisateur ?? data?.account;
+    if (!token || !user) {
+      console.log('Unexpected auth response shape:', JSON.stringify(data, null, 2));
+      return null;
+    }
+    return { token, user };
+  };
+
   const login = async (email: string, password: string): Promise<AuthResult> => {
     try {
       const response = await apiClient.post<AuthResponse>('/auth/login', { email, password });
-      const { token: newToken, user: newUser } = response.data;
-      await storeAuth(newToken, newUser);
+      const parsed = parseAuthResponse(response.data);
+      if (!parsed) {
+        return {
+          success: false,
+          message: 'Réponse invalide du serveur : token ou utilisateur manquant.',
+        };
+      }
+      await storeAuth(parsed.token, parsed.user);
       return { success: true };
     } catch (error: any) {
       return {
@@ -67,8 +83,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signup = async (email: string, password: string, name: string): Promise<AuthResult> => {
     try {
       const response = await apiClient.post<AuthResponse>('/auth/signup', { email, password, name });
-      const { token: newToken, user: newUser } = response.data;
-      await storeAuth(newToken, newUser);
+      const parsed = parseAuthResponse(response.data);
+      if (!parsed) {
+        return {
+          success: false,
+          message: 'Réponse invalide du serveur : token ou utilisateur manquant.',
+        };
+      }
+      await storeAuth(parsed.token, parsed.user);
       return { success: true };
     } catch (error: any) {
       return {

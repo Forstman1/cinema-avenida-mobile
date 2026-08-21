@@ -1,9 +1,12 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Replace 192.168.X.X with your development machine's local IP address.
+// Local backend URL.
+// - iOS simulator: http://localhost:3000/api works.
+// - Android emulator: use http://10.0.2.2:3000/api instead.
+// - Physical device / Expo Go: use your machine's LAN IP, e.g. http://192.168.1.42:3000/api
 const apiClient: AxiosInstance = axios.create({
-  baseURL: 'http://192.168.X.X:3000/api',
+  baseURL: 'http://localhost:3000/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
