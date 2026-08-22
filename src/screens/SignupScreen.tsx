@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   ImageBackground,
   Keyboard,
   KeyboardAvoidingView,
@@ -26,6 +27,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const { signup } = useAuth();
 
   const handleSignup = async () => {
@@ -36,9 +38,13 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
     }
 
     setError('');
-    const result = await signup(email.trim(), password, name.trim());
+    setIsLoading(true);
+    const result = await signup(name.trim(), email.trim(), password);
+    setIsLoading(false);
     if (!result.success) {
-      setError(result.message ?? 'Signup failed');
+      setError(result.message ?? 'Échec de l\'inscription.');
+    } else {
+      navigation.navigate('Login');
     }
   };
 
@@ -200,12 +206,19 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <TouchableOpacity
-              style={styles.button}
+              style={[styles.button, isLoading && styles.buttonDisabled]}
               onPress={handleSignup}
               activeOpacity={0.9}
+              disabled={isLoading}
             >
-              <Text style={styles.buttonText}>S'inscrire</Text>
-              <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Text style={styles.buttonText}>S'inscrire</Text>
+                  <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+                </>
+              )}
             </TouchableOpacity>
 
             <View style={styles.footer}>
@@ -354,6 +367,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 32,
     elevation: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   buttonText: {
     fontFamily: 'Inter-Bold',

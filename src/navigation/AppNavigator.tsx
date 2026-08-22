@@ -9,17 +9,20 @@ import SignupScreen from '../screens/SignupScreen';
 import HomeScreen from '../screens/HomeScreen';
 import MyBookingsScreen from '../screens/MyBookingsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import type { AuthStackParamList, MainTabParamList } from '../types/navigation';
+import MovieDetailsScreen from '../screens/MovieDetailsScreen';
+import ScreeningsScreen from '../screens/ScreeningsScreen';
+import type { AuthStackParamList, MainTabParamList, RootStackParamList } from '../types/navigation';
 
-const Stack = createNativeStackNavigator<AuthStackParamList>();
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
+const RootStack = createNativeStackNavigator<RootStackParamList>();
 
-function AuthStack() {
+function AuthNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Signup" component={SignupScreen} />
-    </Stack.Navigator>
+    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+      <AuthStack.Screen name="Login" component={LoginScreen} />
+      <AuthStack.Screen name="Signup" component={SignupScreen} />
+    </AuthStack.Navigator>
   );
 }
 
@@ -28,11 +31,11 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#e50914',
+        tabBarActiveTintColor: '#b22222',
         tabBarInactiveTintColor: '#888',
         tabBarStyle: {
           backgroundColor: '#121212',
-          borderTopColor: '#333',
+          borderTopColor: 'rgba(255,255,255,0.05)',
           borderTopWidth: 1,
         },
       }}
@@ -44,18 +47,28 @@ function MainTabs() {
   );
 }
 
+function RootNavigator() {
+  return (
+    <RootStack.Navigator screenOptions={{ headerShown: false }}>
+      <RootStack.Screen name="Main" component={MainTabs} />
+      <RootStack.Screen name="MovieDetails" component={MovieDetailsScreen} />
+      <RootStack.Screen name="Screenings" component={ScreeningsScreen} />
+    </RootStack.Navigator>
+  );
+}
+
 export default function AppNavigator() {
   const { user, loading } = useAuth();
 
   if (loading) {
     return (
       <View style={styles.splash}>
-        <ActivityIndicator size="large" color="#e50914" />
+        <ActivityIndicator size="large" color="#b22222" />
       </View>
     );
   }
 
-  return user ? <MainTabs /> : <AuthStack />;
+  return user ? <RootNavigator /> : <AuthNavigator />;
 }
 
 const styles = StyleSheet.create({

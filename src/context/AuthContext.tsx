@@ -1,14 +1,14 @@
 import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
-import type { AuthResponse, AuthResult, User } from '../types';
+import type { AuthResult, LoginResponse, SignupResponse, User } from '../types';
 
 interface AuthContextValue {
   user: User | null;
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<AuthResult>;
-  signup: (email: string, password: string, name: string) => Promise<AuthResult>;
+  signup: (name: string, email: string, password: string) => Promise<AuthResult>;
   logout: () => Promise<void>;
 }
 
@@ -16,6 +16,28 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 interface AuthProviderProps {
   children: ReactNode;
+}
+
+function getApiErrorMessage(error: any, defaultMessage: string): string {
+  if (error.response) {
+    const status = error.response.status;
+    const backendMessage = error.response.data?.message || error.response.data?.error;
+
+    if (status === 400) {
+      return backendMessage ?? 'Veuillez remplir tous les champs.';
+    }
+    if (status === 401) {
+      return 'Email ou mot de passe incorrect.';
+    }
+    if (status === 409) {
+      return 'Cet email est déjà utilisé.';
+    }
+    return backendMessage ?? defaultMessage;
+  }
+  if (error.request) {
+    return 'Impossible de joindre le serveur. Vérifiez l\'adresse IP ou votre connexion.';
+  }
+  return error.message ?? defaultMessage;
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
@@ -50,52 +72,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(newUser);
   };
 
-  const parseAuthResponse = (data: any): { token: string; user: User } | null => {
-    const token = data?.token ?? data?.accessToken ?? data?.authToken;
-    const user = data?.user ?? data?.utilisateur ?? data?.account;
-    if (!token || !user) {
-      console.log('Unexpected auth response shape:', JSON.stringify(data, null, 2));
-      return null;
-    }
-    return { token, user };
-  };
-
   const login = async (email: string, password: string): Promise<AuthResult> => {
     try {
-      const response = await apiClient.post<AuthResponse>('/auth/login', { email, password });
-      const parsed = parseAuthResponse(response.data);
-      if (!parsed) {
+      const response = await apiClient.post<LoginResponse>('/auth/login', { email, password });
+      const { token: newToken, user: newUser } = response.data;
+
+      if (!newToken || !newUser) {
         return {
           success: false,
           message: 'Réponse invalide du serveur : token ou utilisateur manquant.',
         };
       }
-      await storeAuth(parsed.token, parsed.user);
+
+      await storeAuth(newToken, newUser);
       return { success: true };
     } catch (error: any) {
       return {
         success: false,
-        message: error.response?.data?.message || error.message || 'Login failed',
+        message: getApiErrorMessage(error, 'Échec de la connexion.'),
       };
     }
   };
 
-  const signup = async (email: string, password: string, name: string): Promise<AuthResult> => {
+  const signup = async (name: string, email: string, password: string): Promise<AuthResult> => {
     try {
-      const response = await apiClient.post<AuthResponse>('/auth/signup', { email, password, name });
-      const parsed = parseAuthResponse(response.data);
-      if (!parsed) {
-        return {
-          success: false,
-          message: 'Réponse invalide du serveur : token ou utilisateur manquant.',
-        };
-      }
-      await storeAuth(parsed.token, parsed.user);
+      await apiClient.post<SignupResponse>('/auth/signup', { name, email, password });
       return { success: true };
     } catch (error: any) {
       return {
         success: false,
-        message: error.response?.data?.message || error.message || 'Signup failed',
+        message: getApiErrorMessage(error, 'Échec de l\'inscription.'),
       };
     }
   };

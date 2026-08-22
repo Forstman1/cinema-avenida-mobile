@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   ImageBackground,
   Keyboard,
   KeyboardAvoidingView,
@@ -25,6 +26,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
 
   const handleLogin = async () => {
@@ -35,9 +37,11 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     }
 
     setError('');
+    setIsLoading(true);
     const result = await login(email.trim(), password);
+    setIsLoading(false);
     if (!result.success) {
-      setError(result.message ?? 'Login failed');
+      setError(result.message ?? 'Échec de la connexion.');
     }
   };
 
@@ -145,12 +149,19 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <TouchableOpacity
-              style={styles.button}
+              style={[styles.button, isLoading && styles.buttonDisabled]}
               onPress={handleLogin}
               activeOpacity={0.9}
+              disabled={isLoading}
             >
-              <Text style={styles.buttonText}>Se connecter</Text>
-              <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Text style={styles.buttonText}>Se connecter</Text>
+                  <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+                </>
+              )}
             </TouchableOpacity>
           </BlurView>
 
@@ -290,6 +301,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 6,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   buttonText: {
     fontFamily: 'Inter-Bold',
