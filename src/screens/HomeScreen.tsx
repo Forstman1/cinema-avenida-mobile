@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
   StatusBar,
@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -18,7 +18,7 @@ import HorizontalMovieCard from '../components/HorizontalMovieCard';
 import VerticalMovieCard from '../components/VerticalMovieCard';
 import HomeSkeleton from '../components/HomeSkeleton';
 import ErrorState from '../components/ErrorState';
-import type { Movie } from '../types/movie';
+import type { Movie } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 
 type HomeNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
@@ -43,9 +43,11 @@ export default function HomeScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchMovies();
-  }, [fetchMovies]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchMovies();
+    }, [fetchMovies])
+  );
 
   const filteredMovies = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -59,8 +61,8 @@ export default function HomeScreen() {
     navigation.navigate('MovieDetails', { movieId: movie.id });
   };
 
-  const handleTimePress = (movie: Movie, time: string) => {
-    navigation.navigate('Screenings', { movieId: movie.id, movieTitle: movie.title });
+  const handleTimePress = (movie: Movie, _time: string) => {
+    navigation.navigate('Screenings', { movie });
   };
 
   const renderHeader = () => (
@@ -81,7 +83,7 @@ export default function HomeScreen() {
         {featuredMovies.length > 0 ? (
           <FlatList
             data={featuredMovies}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => String(item.id)}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.horizontalList}
@@ -130,7 +132,7 @@ export default function HomeScreen() {
       <StatusBar barStyle="light-content" />
       <FlatList
         data={filteredMovies}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         renderItem={({ item }) => (
           <VerticalMovieCard
             movie={item}
@@ -142,6 +144,7 @@ export default function HomeScreen() {
         ListEmptyComponent={
           <Text style={styles.emptyText}>Aucun film trouvé.</Text>
         }
+        ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />

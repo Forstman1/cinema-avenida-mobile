@@ -23,3 +23,15 @@ export function formatScreeningDate(dateString: string): string {
 
   return `${dayName} ${dayNumber} ${month}`;
 }
+
+export function formatDuration(minutesValue: string | number): string {
+  const total = typeof minutesValue === 'string' ? parseInt(minutesValue, 10) : minutesValue;
+  if (Number.isNaN(total)) return String(minutesValue);
+
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+
+  if (hours === 0) return `${minutes}min`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}min`;
+}

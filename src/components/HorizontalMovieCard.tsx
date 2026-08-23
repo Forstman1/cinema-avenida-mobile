@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { ImageBackground, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { POSTER_PLACEHOLDER } from './PosterImage';
-import type { Movie } from '../types/movie';
+import type { Movie } from '../types';
 
 interface HorizontalMovieCardProps {
   movie: Movie;
@@ -11,7 +10,7 @@ interface HorizontalMovieCardProps {
 }
 
 export default function HorizontalMovieCard({ movie, onPress, isNew = false }: HorizontalMovieCardProps) {
-  const [fallback, setFallback] = useState(false);
+  const hasPoster = Boolean(movie.poster);
 
   return (
     <TouchableOpacity
@@ -19,31 +18,46 @@ export default function HorizontalMovieCard({ movie, onPress, isNew = false }: H
       onPress={() => onPress(movie)}
       style={styles.container}
     >
-      <ImageBackground
-        source={{ uri: fallback ? POSTER_PLACEHOLDER : movie.poster || POSTER_PLACEHOLDER }}
-        style={styles.poster}
-        imageStyle={styles.image}
-        resizeMode="cover"
-        onError={() => setFallback(true)}
-      >
-        <LinearGradient
-          colors={['rgba(0,0,0,0)', 'rgba(19,19,19,0.2)', 'rgba(19,19,19,0.95)']}
-          locations={[0.4, 0.7, 1]}
-          style={styles.gradient}
+      {hasPoster ? (
+        <ImageBackground
+          source={{ uri: movie.poster! }}
+          style={styles.poster}
+          imageStyle={styles.image}
+          resizeMode="cover"
         >
+          <LinearGradient
+            colors={['rgba(0,0,0,0)', 'rgba(19,19,19,0.2)', 'rgba(19,19,19,0.95)']}
+            locations={[0.4, 0.7, 1]}
+            style={styles.gradient}
+          >
+            {isNew && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>NOUVEAU</Text>
+              </View>
+            )}
+            <Text style={styles.title} numberOfLines={2}>
+              {movie.title}
+            </Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {movie.genre}
+            </Text>
+          </LinearGradient>
+        </ImageBackground>
+      ) : (
+        <View style={styles.placeholder}>
           {isNew && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>NOUVEAU</Text>
             </View>
           )}
-          <Text style={styles.title} numberOfLines={2}>
+          <Text style={styles.placeholderTitle} numberOfLines={2}>
             {movie.title}
           </Text>
           <Text style={styles.subtitle} numberOfLines={1}>
             {movie.genre}
           </Text>
-        </LinearGradient>
-      </ImageBackground>
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -74,6 +88,14 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     minHeight: 140,
   },
+  placeholder: {
+    flex: 1,
+    padding: 16,
+    justifyContent: 'flex-end',
+    backgroundColor: '#201f1f',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
   badge: {
     alignSelf: 'flex-start',
     backgroundColor: '#b22222',
@@ -95,6 +117,11 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+  },
+  placeholderTitle: {
+    fontFamily: 'EBGaramond-SemiBold',
+    fontSize: 22,
+    color: '#e5e2e1',
   },
   subtitle: {
     fontFamily: 'Inter-Regular',

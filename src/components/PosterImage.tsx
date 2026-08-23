@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 
-export const POSTER_PLACEHOLDER =
-  'https://placehold.co/600x900/201f1f/e2beba?text=Cin%C3%A9ma+Avenida';
-
 interface PosterImageProps {
-  uri?: string;
+  uri?: string | null;
+  title?: string;
   style?: any;
   contentFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
   borderRadius?: number;
@@ -14,23 +12,31 @@ interface PosterImageProps {
 
 export default function PosterImage({
   uri,
+  title,
   style,
   contentFit = 'cover',
   borderRadius,
 }: PosterImageProps) {
   const [failed, setFailed] = useState(false);
-
-  const source = uri && !failed ? { uri } : POSTER_PLACEHOLDER;
+  const hasImage = uri && !failed;
 
   return (
     <View style={[styles.wrapper, style, borderRadius ? { borderRadius, overflow: 'hidden' } : null]}>
-      <Image
-        source={source}
-        style={[styles.image, { borderRadius }]}
-        contentFit={contentFit}
-        onError={() => setFailed(true)}
-        transition={200}
-      />
+      {hasImage ? (
+        <Image
+          source={{ uri }}
+          style={[styles.image, { borderRadius }]}
+          contentFit={contentFit}
+          onError={() => setFailed(true)}
+          transition={200}
+        />
+      ) : (
+        <View style={[styles.placeholder, { borderRadius }]}>
+          <Text style={styles.placeholderText} numberOfLines={3}>
+            {title ?? 'Cinéma Avenida'}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -43,5 +49,18 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
+  },
+  placeholder: {
+    flex: 1,
+    backgroundColor: '#201f1f',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+  },
+  placeholderText: {
+    fontFamily: 'EBGaramond-SemiBold',
+    fontSize: 14,
+    color: '#aa8986',
+    textAlign: 'center',
   },
 });

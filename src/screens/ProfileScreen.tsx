@@ -1,48 +1,198 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React from 'react';
+import {
+  Alert,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { MaterialIcons } from '@expo/vector-icons';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
 import { useAuth } from '../context/AuthContext';
+import type { RootStackParamList } from '../types/navigation';
+
+function getInitial(name: string): string {
+  return name?.trim()?.charAt(0)?.toUpperCase() ?? '?';
+}
+
+type ProfileNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
 
 export default function ProfileScreen() {
+  const navigation = useNavigation<ProfileNavigationProp>();
   const { user, logout } = useAuth();
+  const insets = useSafeAreaInsets();
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Se déconnecter ?',
+      '',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Se déconnecter',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            // The root navigator (AppNavigator) watches `user` and will switch
+            // from RootNavigator to AuthNavigator automatically.
+          },
+        },
+      ]
+    );
+  };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Profil</Text>
-      <Text style={styles.email}>{user?.email}</Text>
-      <TouchableOpacity style={styles.button} onPress={logout}>
-        <Text style={styles.buttonText}>Se déconnecter</Text>
-      </TouchableOpacity>
-    </View>
+    <SafeAreaView style={[styles.container, { paddingBottom: insets.bottom }]}>
+      <StatusBar barStyle="light-content" />
+
+      <View style={styles.content}>
+        {/* Avatar */}
+        <View style={styles.avatarWrapper}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarInitial}>{getInitial(user?.name ?? '')}</Text>
+          </View>
+        </View>
+
+        {/* Name + email */}
+        <Text style={styles.name} numberOfLines={1}>{user?.name ?? 'Invité'}</Text>
+        <Text style={styles.email} numberOfLines={1}>{user?.email ?? ''}</Text>
+
+        {/* Profile row — display only, no backend route exists */}
+        <View style={styles.row}>
+          <View style={styles.rowIcon}>
+            <MaterialIcons name="person" size={20} color="#e2beba" />
+          </View>
+          <Text style={styles.rowText}>Modifier mon profil</Text>
+          <MaterialIcons name="chevron-right" size={20} color="#666" />
+        </View>
+
+        {/* Admin entry — only visible for ADMIN users */}
+        {user?.role === 'ADMIN' && (
+          <TouchableOpacity
+            style={[styles.row, styles.adminRow]}
+            onPress={() => navigation.navigate('AdminMovies')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.rowIcon}>
+              <MaterialIcons name="movie" size={20} color="#e2beba" />
+            </View>
+            <Text style={styles.rowText}>🎬 Gestion des films</Text>
+            <MaterialIcons name="chevron-right" size={20} color="#e2beba" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Logout button */}
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.9}>
+          <MaterialIcons name="logout" size={20} color="#fff" />
+          <Text style={styles.logoutButtonText}>Se déconnecter</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: '#131313',
+    justifyContent: 'space-between',
+  },
+  content: {
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingTop: 40,
     paddingHorizontal: 24,
   },
-  title: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
+  avatarWrapper: {
+    marginBottom: 24,
+  },
+  avatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#201f1f',
+    borderWidth: 3,
+    borderColor: '#b22222',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: {
+    fontFamily: 'EBGaramond-Bold',
+    fontSize: 48,
+    color: '#b22222',
+  },
+  name: {
+    fontFamily: 'EBGaramond-SemiBold',
+    fontSize: 30,
+    color: '#e5e2e1',
     marginBottom: 8,
+    textAlign: 'center',
   },
   email: {
-    color: '#aaa',
+    fontFamily: 'Inter-Regular',
+    fontSize: 15,
+    color: '#aa8986',
+    marginBottom: 40,
+    textAlign: 'center',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    backgroundColor: '#201f1f',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    opacity: 0.6,
+    marginBottom: 12,
+  },
+  adminRow: {
+    opacity: 1,
+  },
+  rowIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  rowText: {
+    flex: 1,
+    fontFamily: 'Inter-SemiBold',
     fontSize: 16,
-    marginBottom: 32,
+    color: '#e5e2e1',
   },
-  button: {
-    backgroundColor: '#e50914',
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 8,
+  footer: {
+    paddingHorizontal: 24,
+    paddingBottom: 32,
   },
-  buttonText: {
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#b22222',
+    borderRadius: 14,
+    paddingVertical: 16,
+    shadowColor: 'rgba(0,0,0,0.5)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  logoutButtonText: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 16,
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
 });

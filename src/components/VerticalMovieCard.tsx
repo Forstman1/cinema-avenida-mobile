@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import PosterImage from './PosterImage';
-import type { Movie } from '../types/movie';
+import type { Movie } from '../types';
 
 interface VerticalMovieCardProps {
   movie: Movie;
@@ -28,6 +28,7 @@ export default function VerticalMovieCard({ movie, onPress, onTimePress }: Verti
     >
       <PosterImage
         uri={movie.poster}
+        title={movie.title}
         style={styles.poster}
         borderRadius={10}
       />

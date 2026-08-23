@@ -17,9 +17,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { getMovieById, getScreeningsByMovieId } from '../api/movies';
 import ErrorState from '../components/ErrorState';
-import { POSTER_PLACEHOLDER } from '../components/PosterImage';
-import { formatScreeningDate } from '../utils/date';
-import type { Movie, Screening } from '../types/movie';
+import { formatDuration, formatScreeningDate } from '../utils/date';
+import { useAuth } from '../context/AuthContext';
+import type { Movie, Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { MovieDetailsScreenProps } from '../types/navigation';
 
@@ -28,13 +28,13 @@ type DetailsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Movi
 export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
   const navigation = useNavigation<DetailsNavigationProp>();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { movieId } = route.params;
 
   const [movie, setMovie] = useState<Movie | null>(null);
   const [screenings, setScreenings] = useState<Screening[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [posterFailed, setPosterFailed] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -67,7 +67,7 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
 
   const handleReserve = () => {
     if (!movie) return;
-    navigation.navigate('Screenings', { movieId: movie.id, movieTitle: movie.title });
+    navigation.navigate('Screenings', { movie });
   };
 
   if (loading) {
@@ -111,28 +111,42 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Hero poster */}
         <View style={styles.hero}>
-          <ImageBackground
-            source={{ uri: posterFailed ? POSTER_PLACEHOLDER : movie.poster || POSTER_PLACEHOLDER }}
-            style={styles.heroImage}
-            imageStyle={styles.heroImageStyle}
-            resizeMode="cover"
-            onError={() => setPosterFailed(true)}
-          >
-            <LinearGradient
-              colors={['rgba(0,0,0,0)', 'rgba(19,19,19,0.5)', 'rgba(19,19,19,0.95)']}
-              locations={[0.3, 0.6, 1]}
-              style={styles.heroGradient}
+          {movie.poster ? (
+            <ImageBackground
+              source={{ uri: movie.poster }}
+              style={styles.heroImage}
+              imageStyle={styles.heroImageStyle}
+              resizeMode="cover"
             >
-              <Text style={styles.title}>{movie.title}</Text>
+              <LinearGradient
+                colors={['rgba(0,0,0,0)', 'rgba(19,19,19,0.5)', 'rgba(19,19,19,0.95)']}
+                locations={[0.3, 0.6, 1]}
+                style={styles.heroGradient}
+              >
+                <Text style={styles.title}>{movie.title}</Text>
+                <View style={styles.metaRow}>
+                  <View style={styles.genreBadge}>
+                    <Text style={styles.genreText}>{movie.genre}</Text>
+                  </View>
+                  <MaterialIcons name="schedule" size={16} color="#aa8986" />
+                  <Text style={styles.duration}>{formatDuration(movie.duration)}</Text>
+                </View>
+              </LinearGradient>
+            </ImageBackground>
+          ) : (
+            <View style={styles.heroPlaceholder}>
+              <Text style={styles.heroPlaceholderTitle} numberOfLines={2}>
+                {movie.title}
+              </Text>
               <View style={styles.metaRow}>
                 <View style={styles.genreBadge}>
                   <Text style={styles.genreText}>{movie.genre}</Text>
                 </View>
                 <MaterialIcons name="schedule" size={16} color="#aa8986" />
-                <Text style={styles.duration}>{movie.duration}</Text>
+                <Text style={styles.duration}>{formatDuration(movie.duration)}</Text>
               </View>
-            </LinearGradient>
-          </ImageBackground>
+            </View>
+          )}
         </View>
 
         {/* Content */}
@@ -154,15 +168,22 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
               : 'Aucune séance'}
           </Text>
         </View>
-        <TouchableOpacity
-          style={[styles.reserveButton, !screenings.length && styles.reserveButtonDisabled]}
-          onPress={handleReserve}
-          activeOpacity={0.9}
-          disabled={!screenings.length}
-        >
-          <Text style={styles.reserveButtonText}>Réserver</Text>
-          <MaterialIcons name="confirmation-number" size={20} color="#fff" />
-        </TouchableOpacity>
+        {user?.role === 'ADMIN' ? (
+          <View style={styles.adminBadge}>
+            <MaterialIcons name="admin-panel-settings" size={18} color="#aa8986" />
+            <Text style={styles.adminBadgeText}>Connecté en tant qu'administrateur</Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.reserveButton, !screenings.length && styles.reserveButtonDisabled]}
+            onPress={handleReserve}
+            activeOpacity={0.9}
+            disabled={!screenings.length}
+          >
+            <Text style={styles.reserveButtonText}>Réserver</Text>
+            <MaterialIcons name="confirmation-number" size={20} color="#fff" />
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -233,6 +254,24 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
     paddingTop: 120,
     justifyContent: 'flex-end',
+  },
+  heroPlaceholder: {
+    flex: 1,
+    backgroundColor: '#201f1f',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingBottom: 28,
+    paddingTop: 120,
+    justifyContent: 'flex-end',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  heroPlaceholderTitle: {
+    fontFamily: 'EBGaramond-SemiBold',
+    fontSize: 36,
+    color: '#e5e2e1',
+    marginBottom: 12,
   },
   title: {
     fontFamily: 'EBGaramond-SemiBold',
@@ -338,5 +377,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     fontSize: 15,
     color: '#fff',
+  },
+  adminBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  adminBadgeText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 13,
+    color: '#aa8986',
   },
 });

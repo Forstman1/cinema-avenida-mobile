@@ -11,6 +11,11 @@ import MyBookingsScreen from '../screens/MyBookingsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import MovieDetailsScreen from '../screens/MovieDetailsScreen';
 import ScreeningsScreen from '../screens/ScreeningsScreen';
+import SeatMapScreen from '../screens/SeatMapScreen';
+import PaymentScreen from '../screens/PaymentScreen';
+import TicketScreen from '../screens/TicketScreen';
+import AdminMoviesScreen from '../screens/AdminMoviesScreen';
+import AddMovieScreen from '../screens/AddMovieScreen';
 import type { AuthStackParamList, MainTabParamList, RootStackParamList } from '../types/navigation';
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -53,6 +58,11 @@ function RootNavigator() {
       <RootStack.Screen name="Main" component={MainTabs} />
       <RootStack.Screen name="MovieDetails" component={MovieDetailsScreen} />
       <RootStack.Screen name="Screenings" component={ScreeningsScreen} />
+      <RootStack.Screen name="SeatMap" component={SeatMapScreen} />
+      <RootStack.Screen name="Payment" component={PaymentScreen} />
+      <RootStack.Screen name="Ticket" component={TicketScreen} />
+      <RootStack.Screen name="AdminMovies" component={AdminMoviesScreen} />
+      <RootStack.Screen name="AddMovie" component={AddMovieScreen} />
     </RootStack.Navigator>
   );
 }
