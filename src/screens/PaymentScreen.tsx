@@ -16,12 +16,23 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { payReservation } from '../api/payments';
+import type { Reservation } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { PaymentScreenProps } from '../types/navigation';
 
 type PaymentNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Payment'>;
 
-const LOCK_DURATION_SECONDS = 10 * 60; // 10 minutes
+function getRemainingSeconds(reservation: Reservation | undefined): number {
+  if (!reservation?.reservationSeats?.length) return 0;
+  const now = Date.now();
+  const lockedUntils = reservation.reservationSeats
+    .map((rs) => (rs.lockedUntil ? new Date(rs.lockedUntil).getTime() : 0))
+    .filter((t) => t > 0);
+  if (lockedUntils.length === 0) return 0;
+  const maxLockedUntil = Math.max(...lockedUntils);
+  const remaining = Math.floor((maxLockedUntil - now) / 1000);
+  return Math.max(0, remaining);
+}
 
 function formatCountdown(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
@@ -50,10 +61,14 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
   console.log('[DEBUG Payment] reservation:', reservation);
   console.log('[DEBUG Payment] seats:', seats);
 
-  const [remainingSeconds, setRemainingSeconds] = useState(LOCK_DURATION_SECONDS);
+  const [remainingSeconds, setRemainingSeconds] = useState(() => getRemainingSeconds(reservation));
   const [paying, setPaying] = useState(false);
 
   const seatLabels = useMemo(() => seats.map((s) => `${s.row}${s.number}`).join(', '), [seats]);
+
+  useEffect(() => {
+    setRemainingSeconds(getRemainingSeconds(reservation));
+  }, [reservation]);
 
   useEffect(() => {
     if (remainingSeconds <= 0) return;

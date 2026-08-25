@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -34,6 +34,36 @@ function isUpcoming(reservation: Reservation): boolean {
   return screeningDate.getTime() > Date.now();
 }
 
+function getPendingReservation(reservations: Reservation[]): Reservation | null {
+  const now = Date.now();
+  for (const r of reservations) {
+    if (r.status !== 'EN_ATTENTE' || !r.reservationSeats?.length) continue;
+    const lockedUntils = r.reservationSeats
+      .map((rs) => (rs.lockedUntil ? new Date(rs.lockedUntil).getTime() : 0))
+      .filter((t) => t > 0);
+    if (lockedUntils.length > 0 && Math.max(...lockedUntils) > now) {
+      return r;
+    }
+  }
+  return null;
+}
+
+function getRemainingSeconds(reservation: Reservation | null | undefined): number {
+  if (!reservation?.reservationSeats?.length) return 0;
+  const now = Date.now();
+  const lockedUntils = reservation.reservationSeats
+    .map((rs) => (rs.lockedUntil ? new Date(rs.lockedUntil).getTime() : 0))
+    .filter((t) => t > 0);
+  if (lockedUntils.length === 0) return 0;
+  return Math.max(0, Math.floor((Math.max(...lockedUntils) - now) / 1000));
+}
+
+function formatCountdown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
 function formatSeatsLabel(seats: Seat[]): string {
   if (seats.length === 0) return '-';
   const sorted = [...seats].sort((a, b) => {
@@ -56,6 +86,9 @@ export default function MyBookingsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+
+  const pendingReservation = useMemo(() => getPendingReservation(reservations), [reservations]);
 
   const fetchReservations = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -69,6 +102,25 @@ export default function MyBookingsScreen() {
       if (showLoading) setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    setRemainingSeconds(getRemainingSeconds(pendingReservation));
+  }, [pendingReservation]);
+
+  useEffect(() => {
+    if (!pendingReservation || remainingSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setRemainingSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          fetchReservations(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [pendingReservation, remainingSeconds, fetchReservations]);
 
   useFocusEffect(
     useCallback(() => {
@@ -124,6 +176,19 @@ export default function MyBookingsScreen() {
       ticket,
       seats,
     });
+  };
+
+  const handleContinuePayment = (reservation: Reservation) => {
+    const screening = reservation.screening;
+    const seats = reservation.reservationSeats?.map((rs) => rs.seat) ?? [];
+    if (!screening?.movie || seats.length === 0) return;
+
+    navigation.navigate('Payment', {
+      movie: screening.movie,
+      screening,
+      reservation,
+      seats,
+    } as never);
   };
 
   const renderCard = (reservation: Reservation, dimmed: boolean) => {
@@ -246,6 +311,30 @@ export default function MyBookingsScreen() {
         <Text style={styles.headerTitle}>Cinéma Avenida</Text>
       </View>
 
+      {/* Pending reservation card */}
+      {pendingReservation && (
+        <View style={styles.pendingCard}>
+          <View style={styles.pendingHeader}>
+            <MaterialIcons name="timer" size={18} color="#ffb4ac" />
+            <Text style={styles.pendingTitle}>Réservation en cours</Text>
+            <Text style={styles.pendingCountdown}>{formatCountdown(remainingSeconds)}</Text>
+          </View>
+          <Text style={styles.pendingMovie} numberOfLines={1}>
+            {pendingReservation.screening?.movie?.title}
+          </Text>
+          <Text style={styles.pendingDetails}>
+            {formatSeatsLabel(pendingReservation.reservationSeats?.map((rs) => rs.seat) ?? [])} · {pendingReservation.totalAmount} DH
+          </Text>
+          <TouchableOpacity
+            style={styles.pendingButton}
+            onPress={() => handleContinuePayment(pendingReservation)}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.pendingButtonText}>Continuer le paiement</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Tabs */}
       <View style={styles.tabs}>
         <TouchableOpacity
@@ -333,6 +422,56 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: '#e5e2e1',
+  },
+  pendingCard: {
+    backgroundColor: '#201f1f',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#b22222',
+    marginHorizontal: 24,
+    marginBottom: 20,
+    padding: 18,
+  },
+  pendingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  pendingTitle: {
+    flex: 1,
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
+    color: '#ffb4ac',
+    letterSpacing: 0.4,
+  },
+  pendingCountdown: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 16,
+    color: '#ffb4ac',
+  },
+  pendingMovie: {
+    fontFamily: 'EBGaramond-SemiBold',
+    fontSize: 20,
+    color: '#e5e2e1',
+    marginBottom: 4,
+  },
+  pendingDetails: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    color: '#aa8986',
+    marginBottom: 14,
+  },
+  pendingButton: {
+    backgroundColor: '#b22222',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  pendingButtonText: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 14,
+    color: '#fff',
   },
   listContent: {
     paddingHorizontal: 24,

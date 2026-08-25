@@ -11,13 +11,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+import { getMyReservations } from '../api/reservations';
 import { getSeatsByScreeningId, lockSeats } from '../api/seats';
 import ErrorState from '../components/ErrorState';
-import type { Seat, SeatCategory, SeatStatus } from '../types';
+import type { Reservation, Seat, SeatCategory, SeatStatus } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { SeatMapScreenProps } from '../types/navigation';
 
@@ -45,6 +46,22 @@ function isSeatTappable(status: SeatStatus): boolean {
   return status === 'LIBRE';
 }
 
+function getRemainingSeconds(reservation: Reservation | undefined): number {
+  if (!reservation?.reservationSeats?.length) return 0;
+  const now = Date.now();
+  const lockedUntils = reservation.reservationSeats
+    .map((rs) => (rs.lockedUntil ? new Date(rs.lockedUntil).getTime() : 0))
+    .filter((t) => t > 0);
+  if (lockedUntils.length === 0) return 0;
+  return Math.max(0, Math.floor((Math.max(...lockedUntils) - now) / 1000));
+}
+
+function formatCountdown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
 export default function SeatMapScreen({ route }: SeatMapScreenProps) {
   const navigation = useNavigation<SeatMapNavigationProp>();
   const insets = useSafeAreaInsets();
@@ -60,6 +77,69 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locking, setLocking] = useState(false);
+  const [pendingReservation, setPendingReservation] = useState<Reservation | null>(null);
+  const [pendingRemaining, setPendingRemaining] = useState(0);
+
+  // Look for an existing pending reservation for this screening.
+  const checkPendingReservation = useCallback(async () => {
+    if (!screening?.id) return;
+    try {
+      const reservations = await getMyReservations();
+      const now = Date.now();
+      const pending = reservations.find((r) => {
+        if (r.status !== 'EN_ATTENTE' || r.screening?.id !== screening.id) return false;
+        const lockedUntils = (r.reservationSeats ?? [])
+          .map((rs) => (rs.lockedUntil ? new Date(rs.lockedUntil).getTime() : 0))
+          .filter((t) => t > 0);
+        return lockedUntils.length > 0 && Math.max(...lockedUntils) > now;
+      });
+      if (pending) {
+        setPendingReservation(pending);
+        setPendingRemaining(getRemainingSeconds(pending));
+      } else {
+        setPendingReservation(null);
+        setPendingRemaining(0);
+      }
+    } catch {
+      // Silently ignore — this is a UX helper, not critical.
+    }
+  }, [screening?.id]);
+
+  useEffect(() => {
+    checkPendingReservation();
+  }, [checkPendingReservation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      checkPendingReservation();
+    }, [checkPendingReservation])
+  );
+
+  // Countdown for the pending reservation banner.
+  useEffect(() => {
+    if (!pendingReservation || pendingRemaining <= 0) return;
+    const interval = setInterval(() => {
+      setPendingRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [pendingReservation, pendingRemaining]);
+
+  const handleContinuePayment = () => {
+    if (!pendingReservation?.screening?.movie) return;
+    const seatsForPayment = pendingReservation.reservationSeats?.map((rs) => rs.seat) ?? [];
+    navigation.navigate('Payment', {
+      movie: pendingReservation.screening.movie,
+      screening: pendingReservation.screening,
+      reservation: pendingReservation,
+      seats: seatsForPayment,
+    });
+  };
 
   const fetchSeats = useCallback(async (showLoading = true) => {
     if (!screening?.id) {
@@ -93,7 +173,10 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     setRefreshing(false);
   }, [fetchSeats]);
 
+  const hasPendingReservation = Boolean(pendingReservation && pendingRemaining > 0);
+
   const toggleSeat = (seat: Seat) => {
+    if (hasPendingReservation) return;
     if (!isSeatTappable(seat.status)) return;
 
     console.log('[DEBUG SeatMap] toggleSeat tapped:', seat);
@@ -125,7 +208,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
   }, [selectedSeats]);
 
   const handleConfirm = async () => {
-    if (!screening?.id || selectedIds.size === 0) return;
+    if (!screening?.id || selectedIds.size === 0 || hasPendingReservation) return;
     const payload = {
       screeningId: screening.id,
       seatIds: Array.from(selectedIds),
@@ -144,7 +227,26 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     } catch (err: any) {
       console.log('[DEBUG SeatMap] lockSeats error:', err?.message, err?.response?.data, err?.response?.status);
       if (err.response?.status === 409) {
-        const unavailable: { id: number }[] = err.response.data?.seats ?? [];
+        const errorData = err.response.data ?? {};
+
+        // Case 1: user already has an active pending reservation.
+        if (errorData.pendingReservationId) {
+          Alert.alert(
+            'Réservation en cours',
+            errorData.message ?? 'Vous avez déjà une réservation en cours.',
+            [
+              { text: 'OK' },
+              {
+                text: 'Voir ma réservation en cours',
+                onPress: () => navigation.navigate('Main', { screen: 'Mes Billets' } as never),
+              },
+            ]
+          );
+          return;
+        }
+
+        // Case 2: some selected seats were taken by someone else.
+        const unavailable: { id: number }[] = errorData.seats ?? [];
         const unavailableIds = unavailable.map((s) => s.id);
         console.log('[DEBUG SeatMap] 409 unavailable seats:', unavailable);
         setSeats((prev) =>
@@ -178,7 +280,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
 
   const renderSeat = (seat: Seat) => {
     const isSelected = selectedIds.has(seat.id);
-    const tappable = isSeatTappable(seat.status);
+    const tappable = !hasPendingReservation && isSeatTappable(seat.status);
     const category = seat.category;
     const config = CATEGORY_CONFIG[category];
 
@@ -269,7 +371,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
       <StatusBar barStyle="light-content" />
 
       {/* Top bar */}
-      <View style={[styles.topBar, { top: insets.top }]}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.8}>
           <MaterialIcons name="arrow-back" size={24} color="#e5e2e1" />
         </TouchableOpacity>
@@ -279,6 +381,28 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
         </View>
         <View style={styles.topBarSpacer} />
       </View>
+
+      {/* Pending reservation banner */}
+      {pendingReservation && pendingRemaining > 0 && (
+        <View style={styles.pendingBanner}>
+          <View style={styles.pendingBannerInfo}>
+            <MaterialIcons name="timer" size={16} color="#ffb4ac" />
+            <Text style={styles.pendingBannerText} numberOfLines={1}>
+              ⏱ Réservation en cours · {formatCountdown(pendingRemaining)}
+            </Text>
+          </View>
+          <Text style={styles.pendingBannerMovie} numberOfLines={1}>
+            {pendingReservation.screening?.movie?.title}
+          </Text>
+          <Text style={styles.pendingBannerSeats}>
+            {(pendingReservation.reservationSeats ?? []).map((rs) => `${rs.seat.row}${rs.seat.number}`).join(', ')}
+          </Text>
+          <TouchableOpacity style={styles.pendingBannerButton} onPress={handleContinuePayment} activeOpacity={0.9}>
+            <Text style={styles.pendingBannerButtonText}>Continuer le paiement</Text>
+          </TouchableOpacity>
+          <Text style={styles.pendingBannerReadOnly}>La grille est en lecture seule jusqu'au paiement.</Text>
+        </View>
+      )}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -340,10 +464,10 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
           </Text>
         </View>
         <TouchableOpacity
-          style={[styles.confirmButton, (selectedIds.size === 0 || locking) && styles.confirmButtonDisabled]}
+          style={[styles.confirmButton, (selectedIds.size === 0 || locking || hasPendingReservation) && styles.confirmButtonDisabled]}
           onPress={handleConfirm}
           activeOpacity={0.9}
-          disabled={selectedIds.size === 0 || locking}
+          disabled={selectedIds.size === 0 || locking || hasPendingReservation}
         >
           {locking ? (
             <ActivityIndicator size="small" color="#fff" />
@@ -367,16 +491,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   topBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 12,
-    zIndex: 10,
+    paddingBottom: 12,
   },
   backButton: {
     width: 40,
@@ -411,8 +530,60 @@ const styles = StyleSheet.create({
     paddingTop: 48,
   },
   scrollContent: {
-    paddingTop: 80,
+    paddingHorizontal: 0,
     paddingBottom: 160,
+  },
+  pendingBanner: {
+    backgroundColor: '#201f1f',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#b22222',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 16,
+    padding: 16,
+  },
+  pendingBannerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  pendingBannerText: {
+    flex: 1,
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
+    color: '#ffb4ac',
+  },
+  pendingBannerButton: {
+    backgroundColor: '#b22222',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  pendingBannerButtonText: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 14,
+    color: '#fff',
+  },
+  pendingBannerMovie: {
+    fontFamily: 'EBGaramond-SemiBold',
+    fontSize: 18,
+    color: '#e5e2e1',
+    marginBottom: 4,
+  },
+  pendingBannerSeats: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: '#aa8986',
+    marginBottom: 12,
+  },
+  pendingBannerReadOnly: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: '#888',
+    textAlign: 'center',
+    marginTop: 10,
   },
   screenWrapper: {
     alignItems: 'center',

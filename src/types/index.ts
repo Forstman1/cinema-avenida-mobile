@@ -53,6 +53,7 @@ export interface ReservationSeat {
   id: number;
   seatId: number;
   seat: Seat;
+  lockedUntil?: string;
 }
 
 export interface Reservation {

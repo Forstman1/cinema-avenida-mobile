@@ -2,6 +2,7 @@ import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { MaterialIcons } from '@expo/vector-icons';
 
 import { useAuth } from '../context/AuthContext';
 import LoginScreen from '../screens/LoginScreen';
@@ -45,9 +46,27 @@ function MainTabs() {
         },
       }}
     >
-      <Tab.Screen name="Accueil" component={HomeScreen} />
-      <Tab.Screen name="Mes Billets" component={MyBookingsScreen} />
-      <Tab.Screen name="Profil" component={ProfileScreen} />
+      <Tab.Screen
+        name="Accueil"
+        component={HomeScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="home" color={color} size={size} />,
+        }}
+      />
+      <Tab.Screen
+        name="Mes Billets"
+        component={MyBookingsScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="confirmation-number" color={color} size={size} />,
+        }}
+      />
+      <Tab.Screen
+        name="Profil"
+        component={ProfileScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="person" color={color} size={size} />,
+        }}
+      />
     </Tab.Navigator>
   );
 }
