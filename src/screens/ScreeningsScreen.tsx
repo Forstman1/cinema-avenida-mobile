@@ -20,44 +20,23 @@ import ErrorState from '../components/ErrorState';
 import type { Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { ScreeningsScreenProps } from '../types/navigation';
+import {
+  compareShowTimes,
+  getRemainingDaysOfWeek,
+  getTodayDateString,
+  isScreeningInFuture,
+  parseLocalDate,
+  toISODate,
+  toISODateString,
+} from '../utils/date';
 
 type ScreeningsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Screenings'>;
 
-const WEEKDAY_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+const WEEKDAY_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 const MONTH_NAMES = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
 ];
-
-function toISODateString(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function getStartOfWeek(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function parseISODate(dateString: string): Date {
-  const [year, month, day] = dateString.split('-').map(Number);
-  const d = new Date(year, month - 1, day);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
 
 function formatSelectedDate(date: Date): string {
   const weekday = date.toLocaleDateString('fr-FR', { weekday: 'long' });
@@ -68,17 +47,16 @@ function formatSelectedDate(date: Date): string {
 export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
   const navigation = useNavigation<ScreeningsNavigationProp>();
   const insets = useSafeAreaInsets();
-  const { movie } = route.params;
+  const { movie, initialDate } = route.params;
 
-  const today = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
-  const weekStart = useMemo(() => getStartOfWeek(today), [today]);
+  const today = useMemo(() => getTodayDateString(), []);
   const weekDays = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
-    [weekStart]
+    () => getRemainingDaysOfWeek(parseLocalDate(today) ?? new Date()),
+    [today]
+  );
+  const weekDateStrings = useMemo(
+    () => weekDays.map((date) => toISODateString(date)),
+    [weekDays]
   );
 
   const [screenings, setScreenings] = useState<Screening[]>([]);
@@ -89,28 +67,42 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
 
   const groupedScreenings = useMemo(() => {
     const map: Record<string, Screening[]> = {};
+    const allowedDates = new Set(weekDateStrings);
+    const seenScreeningIds = new Set<number>();
+
     screenings.forEach((screening) => {
-      const key = screening.date;
+      if (seenScreeningIds.has(screening.id)) return;
+
+      const key = toISODate(screening.date);
+      if (!allowedDates.has(key) || !isScreeningInFuture(screening)) return;
+
+      seenScreeningIds.add(screening.id);
       if (!map[key]) {
         map[key] = [];
       }
       map[key].push(screening);
     });
     Object.values(map).forEach((list) => {
-      list.sort((a, b) => a.showTime.localeCompare(b.showTime));
+      list.sort((a, b) => compareShowTimes(a.showTime, b.showTime));
     });
     return map;
-  }, [screenings]);
+  }, [screenings, weekDateStrings]);
 
   const daysWithScreenings = useMemo(
-    () => weekDays.map((d) => toISODateString(d)).filter((date) => groupedScreenings[date]?.length > 0),
-    [weekDays, groupedScreenings]
+    () => weekDateStrings.filter((date) => groupedScreenings[date]?.length > 0),
+    [weekDateStrings, groupedScreenings]
   );
 
   const currentDayScreenings = useMemo(() => {
     if (!selectedDate) return [];
     return groupedScreenings[selectedDate] ?? [];
   }, [selectedDate, groupedScreenings]);
+
+  useEffect(() => {
+    if (selectedId !== null && !currentDayScreenings.some((screening) => screening.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [currentDayScreenings, selectedId]);
 
   const fetchScreenings = useCallback(async () => {
     setLoading(true);
@@ -130,16 +122,15 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
   }, [fetchScreenings]);
 
   useEffect(() => {
+    if (loading) return;
     if (selectedDate) return;
-    if (daysWithScreenings.length === 0) return;
 
-    const todayStr = toISODateString(today);
-    if (daysWithScreenings.includes(todayStr)) {
-      setSelectedDate(todayStr);
-    } else {
-      setSelectedDate(daysWithScreenings[0]);
-    }
-  }, [daysWithScreenings, selectedDate, today]);
+    setSelectedDate(
+      initialDate && weekDateStrings.includes(initialDate)
+        ? initialDate
+        : today
+    );
+  }, [groupedScreenings, initialDate, loading, selectedDate, today, weekDateStrings]);
 
   const handleDayPress = useCallback((dateString: string) => {
     setSelectedDate(dateString);
@@ -147,7 +138,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
   }, []);
 
   const handleContinue = () => {
-    if (!selectedId) return;
+    if (selectedId === null) return;
     const screening = currentDayScreenings.find((s) => s.id === selectedId);
     if (!screening) return;
     navigation.navigate('SeatMap', { movie, screening });
@@ -155,8 +146,10 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
 
   const renderCard = (screening: Screening) => {
     const isSelected = screening.id === selectedId;
-    const availableSeats =
-      typeof screening.availableSeats === 'number' ? screening.availableSeats : 120;
+    const availableSeatsLabel =
+      typeof screening.availableSeats === 'number'
+        ? `${screening.availableSeats} places disponibles`
+        : 'Places disponibles non communiquées';
 
     return (
       <TouchableOpacity
@@ -175,7 +168,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
               isSelected && styles.seatsTextSelected,
             ]}
           >
-            {availableSeats} places disponibles
+            {availableSeatsLabel}
           </Text>
         </View>
         <View style={[styles.radio, isSelected && styles.radioSelected]}>
@@ -244,7 +237,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
                 <Text style={styles.bannerTitle}>{movie.title}</Text>
                 <Text style={styles.bannerSubtitle}>
                   {selectedDate
-                    ? `Sélectionnez une séance — ${formatSelectedDate(parseISODate(selectedDate))}`
+                    ? `Sélectionnez une séance — ${formatSelectedDate(parseLocalDate(selectedDate) ?? new Date())}`
                     : 'Sélectionnez une séance'}
                 </Text>
               </LinearGradient>
@@ -254,7 +247,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
               <Text style={styles.bannerTitle}>{movie.title}</Text>
               <Text style={styles.bannerSubtitle}>
                 {selectedDate
-                  ? `Sélectionnez une séance — ${formatSelectedDate(parseISODate(selectedDate))}`
+                  ? `Sélectionnez une séance — ${formatSelectedDate(parseLocalDate(selectedDate) ?? new Date())}`
                   : 'Sélectionnez une séance'}
               </Text>
             </View>
@@ -262,40 +255,43 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
         </View>
 
         {/* Day strip */}
-        {daysWithScreenings.length > 0 && (
-          <View style={styles.weekStrip}>
-            <View style={styles.daysRow}>
-              {daysWithScreenings.map((dateString) => {
-                const date = parseISODate(dateString);
-                const selected = dateString === selectedDate;
-                const weekdayIndex = (date.getDay() + 6) % 7;
+        <View style={styles.weekStrip}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.daysRow}
+          >
+            {weekDateStrings.map((dateString) => {
+              const date = parseLocalDate(dateString);
+              if (!date) return null;
 
-                return (
-                  <TouchableOpacity
-                    key={dateString}
-                    style={[styles.dayButton, selected && styles.dayButtonSelected]}
-                    onPress={() => handleDayPress(dateString)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.dayLabel, selected && styles.dayLabelSelected]}>
-                      {WEEKDAY_SHORT[weekdayIndex]}
-                    </Text>
-                    <Text style={[styles.dayNumber, selected && styles.dayNumberSelected]}>
-                      {date.getDate()}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        )}
+              const selected = dateString === selectedDate;
+              const weekdayIndex = date.getDay();
+
+              return (
+                <TouchableOpacity
+                  key={dateString}
+                  style={[styles.dayButton, selected && styles.dayButtonSelected]}
+                  onPress={() => handleDayPress(dateString)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.dayLabel, selected && styles.dayLabelSelected]}>
+                    {WEEKDAY_SHORT[weekdayIndex]} {date.getDate()}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
 
         {/* Screening cards */}
         <View style={styles.cards}>
-          {currentDayScreenings.length > 0 ? (
+          {daysWithScreenings.length === 0 ? (
+            <Text style={styles.emptyText}>Aucune séance prévue</Text>
+          ) : currentDayScreenings.length > 0 ? (
             currentDayScreenings.map(renderCard)
           ) : (
-            <Text style={styles.emptyText}>Aucune séance disponible.</Text>
+            <Text style={styles.emptyText}>Aucune séance ce jour</Text>
           )}
         </View>
       </ScrollView>
@@ -303,10 +299,10 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
       {/* Continue button */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
         <TouchableOpacity
-          style={[styles.continueButton, !selectedId && styles.continueButtonDisabled]}
+          style={[styles.continueButton, selectedId === null && styles.continueButtonDisabled]}
           onPress={handleContinue}
           activeOpacity={0.9}
-          disabled={!selectedId}
+          disabled={selectedId === null}
         >
           <Text style={styles.continueButtonText}>Continuer</Text>
           <MaterialIcons name="arrow-forward" size={20} color="#fff" />
@@ -415,14 +411,14 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   daysRow: {
-    flex: 1,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 8,
+    paddingRight: 8,
   },
   dayButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 38,
+    width: 64,
     height: 54,
     borderRadius: 12,
     backgroundColor: '#201f1f',
@@ -441,15 +437,6 @@ const styles = StyleSheet.create({
   },
   dayLabelSelected: {
     color: '#ffb4ac',
-  },
-  dayNumber: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 16,
-    color: '#e5e2e1',
-    marginTop: 4,
-  },
-  dayNumberSelected: {
-    color: '#fff',
   },
   cards: {
     paddingHorizontal: 24,

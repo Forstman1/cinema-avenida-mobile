@@ -7,20 +7,16 @@ export default function HomeSkeleton() {
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.container}
     >
-      {/* Search bar skeleton */}
-      <View style={styles.searchBar} />
-
-      {/* Section title */}
+      {/* Header and weekly programme skeleton */}
+      <View style={styles.header} />
       <View style={styles.sectionTitle} />
-
-      {/* Horizontal cards skeleton */}
-      <View style={styles.horizontalRow}>
-        <View style={styles.horizontalCard} />
-        <View style={styles.horizontalCard} />
+      <View style={styles.daysRow}>
+        <View style={styles.day} />
+        <View style={styles.day} />
+        <View style={styles.day} />
+        <View style={styles.day} />
       </View>
-
-      {/* Second section title */}
-      <View style={styles.sectionTitleShort} />
+      <View style={styles.selectedDate} />
 
       {/* Vertical cards skeleton */}
       <View style={styles.verticalCard}>
@@ -49,32 +45,33 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 100,
   },
-  searchBar: {
-    height: 48,
+  header: {
+    width: 180,
+    height: 32,
     backgroundColor: '#201f1f',
-    borderRadius: 12,
-    marginBottom: 24,
+    borderRadius: 6,
+    marginBottom: 28,
   },
   sectionTitle: {
-    width: 120,
+    width: 220,
     height: 24,
     backgroundColor: '#201f1f',
     borderRadius: 6,
     marginBottom: 16,
   },
-  horizontalRow: {
+  daysRow: {
     flexDirection: 'row',
-    marginBottom: 32,
+    gap: 8,
+    marginBottom: 24,
   },
-  horizontalCard: {
-    width: 260,
-    height: 380,
+  day: {
+    width: 64,
+    height: 44,
     backgroundColor: '#201f1f',
-    borderRadius: 16,
-    marginRight: 16,
+    borderRadius: 10,
   },
-  sectionTitleShort: {
-    width: 100,
+  selectedDate: {
+    width: 200,
     height: 24,
     backgroundColor: '#201f1f',
     borderRadius: 6,

@@ -1,52 +1,33 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import PosterImage from './PosterImage';
-import { formatScreeningDate, getNextScreening, getTodayDateString, toISODate } from '../utils/date';
+import { compareShowTimes } from '../utils/date';
 import type { Movie, Screening } from '../types';
 
 interface VerticalMovieCardProps {
   movie: Movie;
-  onPress: (movie: Movie, nextScreening?: Screening) => void;
-  onTimePress?: (movie: Movie, time: string) => void;
+  screenings?: Screening[];
+  onPress: (movie: Movie, screening?: Screening) => void;
+  onTimePress?: (movie: Movie, screening: Screening) => void;
 }
 
-export default function VerticalMovieCard({ movie, onPress, onTimePress }: VerticalMovieCardProps) {
-  const today = getTodayDateString();
-
+export default function VerticalMovieCard({
+  movie,
+  screenings = movie.screenings ?? [],
+  onPress,
+  onTimePress,
+}: VerticalMovieCardProps) {
   const sortedScreenings = useMemo(() => {
-    const list = movie.screenings ?? [];
-    return [...list].sort((a, b) => {
-      const dateA = toISODate(a.date);
-      const dateB = toISODate(b.date);
-      if (dateA !== dateB) return dateA.localeCompare(dateB);
-      return a.showTime.localeCompare(b.showTime);
-    });
-  }, [movie.screenings]);
+    return [...screenings].sort((a, b) => compareShowTimes(a.showTime, b.showTime));
+  }, [screenings]);
 
-  const todayScreenings = useMemo(
-    () => sortedScreenings.filter((screening) => toISODate(screening.date) === today),
-    [sortedScreenings, today]
-  );
-
-  const nextScreening = useMemo(
-    () => getNextScreening(sortedScreenings),
-    [sortedScreenings]
-  );
-
-  const [selectedTime, setSelectedTime] = useState<string>(
-    todayScreenings[0]?.showTime ?? nextScreening?.showTime ?? ''
-  );
-
-  const handleTimePress = (time: string) => {
-    setSelectedTime(time);
-    onTimePress?.(movie, time);
-  };
+  const firstScreening = sortedScreenings[0];
 
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      onPress={() => onPress(movie, nextScreening ?? undefined)}
+      onPress={() => onPress(movie, firstScreening)}
       style={styles.container}
     >
       <PosterImage
@@ -68,25 +49,20 @@ export default function VerticalMovieCard({ movie, onPress, onTimePress }: Verti
           </View>
         </View>
         <View style={styles.chips}>
-          {todayScreenings.length > 0 ? (
-            todayScreenings.map((screening) => {
+          {sortedScreenings.length > 0 ? (
+            sortedScreenings.map((screening) => {
               const time = screening.showTime;
-              const isSelected = time === selectedTime;
               return (
                 <TouchableOpacity
                   key={screening.id}
                   activeOpacity={0.8}
-                  onPress={() => handleTimePress(time)}
-                  style={[styles.chip, isSelected && styles.chipSelected]}
+                  onPress={() => onTimePress?.(movie, screening)}
+                  style={styles.chip}
                 >
-                  <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>{time}</Text>
+                  <Text style={styles.chipText}>{time}</Text>
                 </TouchableOpacity>
               );
             })
-          ) : nextScreening ? (
-            <Text style={styles.nextSession}>
-              Prochaine séance : {formatScreeningDate(nextScreening.date)} à {nextScreening.showTime}
-            </Text>
           ) : null}
         </View>
       </View>
@@ -156,26 +132,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
-  chipSelected: {
-    backgroundColor: '#b22222',
-    borderColor: '#b22222',
-    shadowColor: 'rgba(178,34,34,0.3)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    elevation: 4,
-  },
   chipText: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 12,
     color: '#e5e2e1',
-  },
-  chipTextSelected: {
-    color: '#fff',
-  },
-  nextSession: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 13,
-    color: '#e2beba',
   },
 });

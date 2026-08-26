@@ -29,7 +29,7 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
   const navigation = useNavigation<DetailsNavigationProp>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { movieId, screening: suggestedScreening } = route.params;
+  const { movieId, initialDate, screening: suggestedScreening } = route.params;
 
   const [movie, setMovie] = useState<Movie | null>(null);
   const [screenings, setScreenings] = useState<Screening[]>([]);
@@ -58,15 +58,16 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
   }, [fetchData]);
 
   const nextScreening = useMemo(() => {
-    if (suggestedScreening && screenings.some((s) => s.id === suggestedScreening.id)) {
-      return suggestedScreening;
+    if (suggestedScreening) {
+      const matchingScreening = screenings.find((screening) => screening.id === suggestedScreening.id);
+      if (matchingScreening) return matchingScreening;
     }
     return getNextScreening(screenings);
   }, [screenings, suggestedScreening]);
 
   const handleReserve = () => {
     if (!movie || !nextScreening) return;
-    navigation.navigate('SeatMap', { movie, screening: nextScreening });
+    navigation.navigate('Screenings', { movie, initialDate });
   };
 
   if (loading) {
@@ -164,7 +165,7 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
           <Text style={styles.bottomBarTime}>
             {nextScreening
               ? `${formatScreeningDate(nextScreening.date)}, ${nextScreening.showTime}`
-              : 'Aucune séance'}
+              : 'Aucune séance prévue'}
           </Text>
         </View>
         {user?.role === 'ADMIN' ? (

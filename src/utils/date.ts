@@ -3,12 +3,11 @@ import type { Reservation, Screening } from '../types';
 const WEEKDAYS = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'];
 const MONTHS = ['Jan.', 'Fév.', 'Mar.', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'];
 
-export function getScreeningDateTime(reservation: Reservation): Date | null {
-  const screening = reservation.screening;
-  if (!screening?.date) return null;
+function getScreeningDateTimeValue(screening: Screening): Date | null {
+  if (!screening.date) return null;
 
-  const date = new Date(screening.date);
-  if (Number.isNaN(date.getTime())) return null;
+  const date = parseLocalDate(screening.date);
+  if (!date) return null;
 
   const [hoursStr, minutesStr] = (screening.showTime ?? '00:00').split(':');
   const hours = parseInt(hoursStr, 10);
@@ -24,19 +23,15 @@ export function getScreeningDateTime(reservation: Reservation): Date | null {
   return date;
 }
 
+export function getScreeningDateTime(reservation: Reservation): Date | null {
+  return reservation.screening ? getScreeningDateTimeValue(reservation.screening) : null;
+}
+
 export function formatScreeningDate(dateString: string): string {
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) {
-    return dateString;
-  }
+  const date = parseLocalDate(dateString);
+  if (!date) return dateString;
 
-  const today = new Date();
-  const isToday =
-    date.getDate() === today.getDate() &&
-    date.getMonth() === today.getMonth() &&
-    date.getFullYear() === today.getFullYear();
-
-  if (isToday) {
+  if (toISODateString(date) === getTodayDateString()) {
     return 'Aujourd\'hui';
   }
 
@@ -59,6 +54,31 @@ export function toISODate(dateString: string): string {
   return dateString.split('T')[0];
 }
 
+/** Parse an API calendar date without allowing the runtime to apply a UTC offset. */
+export function parseLocalDate(dateString: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(toISODate(dateString));
+  if (!match) return null;
+
+  const [, yearString, monthString, dayString] = match;
+  const date = new Date(Number(yearString), Number(monthString) - 1, Number(dayString));
+  date.setHours(0, 0, 0, 0);
+
+  if (
+    date.getFullYear() !== Number(yearString) ||
+    date.getMonth() !== Number(monthString) - 1 ||
+    date.getDate() !== Number(dayString)
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+export function isScreeningInFuture(screening: Screening, now = new Date()): boolean {
+  const screeningDateTime = getScreeningDateTimeValue(screening);
+  return Boolean(screeningDateTime && screeningDateTime.getTime() >= now.getTime());
+}
+
 export function formatDuration(minutesValue: string | number): string {
   const total = typeof minutesValue === 'string' ? parseInt(minutesValue, 10) : minutesValue;
   if (Number.isNaN(total)) return String(minutesValue);
@@ -77,14 +97,29 @@ function compareScreeningsByDateTime(a: Screening, b: Screening): number {
   if (dateA !== dateB) {
     return dateA.localeCompare(dateB);
   }
-  return a.showTime.localeCompare(b.showTime);
+  return compareShowTimes(a.showTime, b.showTime);
+}
+
+/** Compare cinema show times numerically, including unpadded API values such as `8:00`. */
+export function compareShowTimes(a: string, b: string): number {
+  const toMinutes = (value: string) => {
+    const [hours, minutes] = value.split(':').map(Number);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+    return hours * 60 + minutes;
+  };
+
+  const minutesA = toMinutes(a);
+  const minutesB = toMinutes(b);
+  if (minutesA !== null && minutesB !== null && minutesA !== minutesB) {
+    return minutesA - minutesB;
+  }
+  return a.localeCompare(b);
 }
 
 export function getNextScreening(screenings: Screening[]): Screening | null {
-  if (!screenings.length) return null;
-  const today = getTodayDateString();
-  const sorted = [...screenings].sort(compareScreeningsByDateTime);
-  return sorted.find((screening) => toISODate(screening.date) >= today) ?? sorted[0];
+  const upcoming = screenings.filter((screening) => isScreeningInFuture(screening));
+  if (!upcoming.length) return null;
+  return [...upcoming].sort(compareScreeningsByDateTime)[0] ?? null;
 }
 
 export function toISODateString(date: Date): string {
@@ -94,9 +129,9 @@ export function toISODateString(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export function getRemainingDaysOfWeek(): Date[] {
+export function getRemainingDaysOfWeek(fromDate = new Date()): Date[] {
   const days: Date[] = [];
-  const today = new Date();
+  const today = new Date(fromDate);
   today.setHours(0, 0, 0, 0);
   const currentDay = today.getDay();
   const daysUntilSunday = currentDay === 0 ? 0 : 7 - currentDay;

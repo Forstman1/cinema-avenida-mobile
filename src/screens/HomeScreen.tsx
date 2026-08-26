@@ -1,6 +1,7 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -9,39 +10,80 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { getMovies } from '../api/movies';
-import SearchBar from '../components/SearchBar';
-import HorizontalMovieCard from '../components/HorizontalMovieCard';
 import VerticalMovieCard from '../components/VerticalMovieCard';
 import HomeSkeleton from '../components/HomeSkeleton';
 import ErrorState from '../components/ErrorState';
 import AdminDashboard from '../components/AdminDashboard';
 import { useAuth } from '../context/AuthContext';
-import { getNextScreening, getTodayDateString, toISODate } from '../utils/date';
+import {
+  compareShowTimes,
+  getRemainingDaysOfWeek,
+  getTodayDateString,
+  parseLocalDate,
+  toISODate,
+  toISODateString,
+} from '../utils/date';
 import type { Movie, Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 
 type HomeNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
+type ProgrammeMovie = { movie: Movie; screenings: Screening[] };
+
+const FRENCH_WEEKDAYS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
+const FRENCH_MONTHS = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+];
+
+function formatSelectedDate(dateString: string): string {
+  const date = parseLocalDate(dateString);
+  if (!date) return dateString;
+
+  const weekday = date.toLocaleDateString('fr-FR', { weekday: 'long' });
+  return `${weekday} ${date.getDate()} ${FRENCH_MONTHS[date.getMonth()]}`;
+}
+
+function getUniqueScreeningsForDate(movie: Movie, dateString: string): Screening[] {
+  const seenIds = new Set<number>();
+  const seenTimes = new Set<string>();
+
+  return (movie.screenings ?? [])
+    .filter((screening) => toISODate(screening.date) === dateString)
+    .sort((a, b) => compareShowTimes(a.showTime, b.showTime))
+    .filter((screening) => {
+      if (seenIds.has(screening.id) || seenTimes.has(screening.showTime)) return false;
+      seenIds.add(screening.id);
+      seenTimes.add(screening.showTime);
+      return true;
+    });
+}
 
 export default function HomeScreen() {
-  const navigation = useNavigation<HomeNavigationProp>();
   const { user } = useAuth();
-  const isAdmin = user?.role === 'ADMIN';
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
 
-  if (isAdmin) {
+  if (user?.role === 'ADMIN') {
     return <AdminDashboard />;
   }
 
-  const getMovieNextScreening = useCallback((movie: Movie) => {
-    return getNextScreening(movie.screenings ?? []);
-  }, []);
+  return <CustomerHomeScreen />;
+}
+
+function CustomerHomeScreen() {
+  const navigation = useNavigation<HomeNavigationProp>();
+  const [movies, setMovies] = useState<Movie[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const today = useMemo(() => getTodayDateString(), []);
+  const weekDays = useMemo(() => getRemainingDaysOfWeek(), []);
+  const weekDateStrings = useMemo(
+    () => weekDays.map((date) => toISODateString(date)),
+    [weekDays]
+  );
+  const [selectedDate, setSelectedDate] = useState(today);
 
   const fetchMovies = useCallback(async () => {
     setLoading(true);
@@ -50,7 +92,7 @@ export default function HomeScreen() {
       const data = await getMovies({ current: true });
       setMovies(data);
     } catch (err: any) {
-      setError(err?.message ?? 'Impossible de charger les films.');
+      setError(err?.message ?? 'Impossible de charger le programme.');
     } finally {
       setLoading(false);
     }
@@ -62,77 +104,99 @@ export default function HomeScreen() {
     }, [fetchMovies])
   );
 
-  const filteredMovies = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return movies;
-    return movies.filter((movie) => movie.title.toLowerCase().includes(query));
-  }, [movies, searchQuery]);
+  useEffect(() => {
+    const duplicateGroups = new Map<string, number[]>();
 
-  const today = getTodayDateString();
+    movies.forEach((movie) => {
+      (movie.screenings ?? []).forEach((screening) => {
+        const date = toISODate(screening.date);
+        if (!weekDateStrings.includes(date)) return;
 
-  const featuredMovies = useMemo(() => {
-    return filteredMovies.filter((movie) =>
-      movie.screenings?.some((screening) => toISODate(screening.date) === today)
-    );
-  }, [filteredMovies, today]);
+        const key = `${movie.id}|${date}|${screening.showTime}`;
+        const ids = duplicateGroups.get(key) ?? [];
+        ids.push(screening.id);
+        duplicateGroups.set(key, ids);
+      });
+    });
+
+    duplicateGroups.forEach((ids, key) => {
+      if (ids.length > 1) {
+        console.warn('[Programme] Données dupliquées : même film/date/heure', { key, screeningIds: ids });
+      }
+    });
+  }, [movies, weekDateStrings]);
+
+  const programmeMovies = useMemo<ProgrammeMovie[]>(() => {
+    return movies.reduce<ProgrammeMovie[]>((result, movie) => {
+      const screenings = getUniqueScreeningsForDate(movie, selectedDate);
+      if (screenings.length > 0) result.push({ movie, screenings });
+      return result;
+    }, []);
+  }, [movies, selectedDate]);
+
+  const hasScreeningsThisWeek = useMemo(
+    () => movies.some((movie) =>
+      (movie.screenings ?? []).some((screening) => weekDateStrings.includes(toISODate(screening.date)))
+    ),
+    [movies, weekDateStrings]
+  );
 
   const handleMoviePress = (movie: Movie, screening?: Screening) => {
-    navigation.navigate('MovieDetails', { movieId: movie.id, screening });
+    navigation.navigate('MovieDetails', {
+      movieId: movie.id,
+      screening,
+      initialDate: selectedDate,
+    });
   };
 
-  const handleTimePress = (movie: Movie, _time: string) => {
-    navigation.navigate('Screenings', { movie });
+  const handleTimePress = (movie: Movie, screening: Screening) => {
+    navigation.navigate('Screenings', {
+      movie,
+      initialDate: toISODate(screening.date),
+    });
   };
 
   const renderHeader = () => (
     <>
       <View style={styles.header}>
         <Text style={styles.logo}>Cinéma Avenida</Text>
-        <TouchableOpacity style={styles.profileButton} activeOpacity={0.8}>
-          <MaterialIcons name="person" size={22} color="#e5e2e1" />
-        </TouchableOpacity>
       </View>
 
-      <View style={styles.searchWrapper}>
-        <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
+      <View style={styles.programmeHeader}>
+        <Text style={styles.sectionTitle}>Programme de la semaine</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.daysRow}
+        >
+          {weekDays.map((date, index) => {
+            const dateString = weekDateStrings[index];
+            const selected = dateString === selectedDate;
+
+            return (
+              <TouchableOpacity
+                key={dateString}
+                style={[styles.dayButton, selected && styles.dayButtonSelected]}
+                onPress={() => setSelectedDate(dateString)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.dayLabel, selected && styles.dayLabelSelected]}>
+                  {FRENCH_WEEKDAYS[date.getDay()]} {date.getDate()}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>À l'affiche</Text>
-        {featuredMovies.length > 0 ? (
-          <FlatList
-            data={featuredMovies}
-            keyExtractor={(item) => String(item.id)}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.horizontalList}
-            renderItem={({ item, index }) => (
-              <HorizontalMovieCard
-                movie={item}
-                onPress={handleMoviePress}
-                isNew={index === 0}
-              />
-            )}
-          />
-        ) : (
-          <Text style={styles.emptyText}>Aucune séance aujourd’hui</Text>
-        )}
-      </View>
-
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Cette semaine</Text>
-        {filteredMovies.length > 0 && (
-          <TouchableOpacity activeOpacity={0.8}>
-            <Text style={styles.seeAll}>TOUT VOIR</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      <Text style={styles.selectedDateTitle}>Séances du {formatSelectedDate(selectedDate)}</Text>
     </>
   );
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
         <HomeSkeleton />
       </SafeAreaView>
     );
@@ -141,6 +205,7 @@ export default function HomeScreen() {
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
         <ErrorState message={error} onRetry={fetchMovies} />
       </SafeAreaView>
     );
@@ -150,20 +215,23 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
       <FlatList
-        data={filteredMovies}
-        keyExtractor={(item) => String(item.id)}
+        data={programmeMovies}
+        keyExtractor={({ movie }) => String(movie.id)}
         renderItem={({ item }) => (
           <VerticalMovieCard
-            movie={item}
+            movie={item.movie}
+            screenings={item.screenings}
             onPress={handleMoviePress}
             onTimePress={handleTimePress}
           />
         )}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={
-          <Text style={styles.emptyText}>Aucun film trouvé.</Text>
+          <Text style={styles.emptyText}>
+            {hasScreeningsThisWeek ? 'Aucune séance ce jour' : 'Aucune séance prévue cette semaine'}
+          </Text>
         }
-        ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
@@ -180,59 +248,68 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 100,
+    flexGrow: 1,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 28,
   },
   logo: {
     fontFamily: 'EBGaramond-SemiBold',
     fontSize: 28,
     color: '#e5e2e1',
   },
-  profileButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#201f1f',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchWrapper: {
+  programmeHeader: {
     marginBottom: 24,
-  },
-  section: {
-    marginBottom: 28,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
   },
   sectionTitle: {
     fontFamily: 'EBGaramond-SemiBold',
     fontSize: 24,
     color: '#e5e2e1',
+    marginBottom: 16,
   },
-  seeAll: {
+  daysRow: {
+    gap: 8,
+    paddingRight: 4,
+  },
+  dayButton: {
+    minWidth: 64,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: '#201f1f',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  dayButtonSelected: {
+    backgroundColor: '#b22222',
+    borderColor: '#b22222',
+  },
+  dayLabel: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 12,
-    color: '#ffb4ac',
-    letterSpacing: 0.6,
+    color: '#aa8986',
+    letterSpacing: 0.3,
   },
-  horizontalList: {
-    paddingRight: 20,
-    paddingVertical: 4,
+  dayLabelSelected: {
+    color: '#fff',
+  },
+  selectedDateTitle: {
+    fontFamily: 'EBGaramond-SemiBold',
+    fontSize: 22,
+    color: '#e5e2e1',
+    marginBottom: 16,
+  },
+  separator: {
+    height: 16,
   },
   emptyText: {
     fontFamily: 'Inter-Regular',
     fontSize: 14,
     color: '#aa8986',
+    textAlign: 'center',
     marginTop: 8,
+    paddingVertical: 16,
   },
 });
