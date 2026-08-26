@@ -53,6 +53,10 @@ export default function AdminMoviesScreen() {
     navigation.navigate('AddMovie', { movie });
   };
 
+  const handleManageScreenings = (movie: Movie) => {
+    navigation.navigate('ManageScreenings', { movie });
+  };
+
   const renderItem = ({ item }: { item: Movie }) => (
     <View style={styles.card}>
       {item.poster ? (
@@ -66,9 +70,16 @@ export default function AdminMoviesScreen() {
         <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
         <Text style={styles.genre}>{item.genre}</Text>
       </View>
-      <TouchableOpacity style={styles.editButton} onPress={() => handleEdit(item)} activeOpacity={0.9}>
-        <Text style={styles.editButtonText}>Modifier</Text>
-      </TouchableOpacity>
+      <View style={styles.actions}>
+        <TouchableOpacity style={[styles.actionButton, styles.editButton]} onPress={() => handleEdit(item)} activeOpacity={0.9}>
+          <MaterialIcons name="edit" size={16} color="#ffb4ac" />
+          <Text style={styles.editButtonText}>Modifier</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.actionButton, styles.screeningsButton]} onPress={() => handleManageScreenings(item)} activeOpacity={0.9}>
+          <MaterialIcons name="schedule" size={16} color="#e2beba" />
+          <Text style={styles.screeningsButtonText}>Séances</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -88,9 +99,7 @@ export default function AdminMoviesScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
         <View style={styles.topBar}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.8}>
-            <MaterialIcons name="arrow-back" size={24} color="#e5e2e1" />
-          </TouchableOpacity>
+          <View style={styles.topBarSpacer} />
           <Text style={styles.topBarTitle}>Gestion des Films</Text>
           <View style={styles.topBarSpacer} />
         </View>
@@ -104,9 +113,7 @@ export default function AdminMoviesScreen() {
       <StatusBar barStyle="light-content" />
 
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.8}>
-          <MaterialIcons name="arrow-back" size={24} color="#e5e2e1" />
-        </TouchableOpacity>
+        <View style={styles.topBarSpacer} />
         <Text style={styles.topBarTitle}>Gestion des Films</Text>
         <View style={styles.topBarSpacer} />
       </View>
@@ -147,16 +154,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingBottom: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   topBarTitle: {
     fontFamily: 'EBGaramond-SemiBold',
@@ -216,18 +213,37 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#aa8986',
   },
-  editButton: {
-    backgroundColor: 'rgba(178,34,34,0.15)',
+  actions: {
+    flexDirection: 'column',
+    gap: 8,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     borderRadius: 10,
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     borderWidth: 1,
+  },
+  editButton: {
+    backgroundColor: 'rgba(178,34,34,0.15)',
     borderColor: 'rgba(178,34,34,0.3)',
   },
   editButtonText: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 13,
     color: '#ffb4ac',
+  },
+  screeningsButton: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  screeningsButtonText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 13,
+    color: '#e2beba',
   },
   fab: {
     position: 'absolute',

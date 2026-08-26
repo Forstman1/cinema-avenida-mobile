@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import PosterImage from './PosterImage';
+import { formatScreeningDate, getTodayDateString, toISODate } from '../utils/date';
 import type { Movie } from '../types';
 
 interface VerticalMovieCardProps {
@@ -10,10 +11,38 @@ interface VerticalMovieCardProps {
   onTimePress?: (movie: Movie, time: string) => void;
 }
 
-const DEFAULT_SLOTS = ['18:00', '20:30', '22:30'];
+function compareScreeningsByDateTime(a: NonNullable<Movie['screenings']>[number], b: NonNullable<Movie['screenings']>[number]): number {
+  const dateA = toISODate(a.date);
+  const dateB = toISODate(b.date);
+  if (dateA !== dateB) {
+    return dateA.localeCompare(dateB);
+  }
+  return a.showTime.localeCompare(b.showTime);
+}
 
 export default function VerticalMovieCard({ movie, onPress, onTimePress }: VerticalMovieCardProps) {
-  const [selectedTime, setSelectedTime] = useState<string>('20:30');
+  const today = getTodayDateString();
+
+  const sortedScreenings = useMemo(() => {
+    const list = movie.screenings ?? [];
+    return [...list].sort(compareScreeningsByDateTime);
+  }, [movie.screenings]);
+
+  const todayScreenings = useMemo(
+    () => sortedScreenings.filter((screening) => toISODate(screening.date) === today),
+    [sortedScreenings, today]
+  );
+
+  const upcomingScreenings = useMemo(
+    () => sortedScreenings.filter((screening) => toISODate(screening.date) >= today),
+    [sortedScreenings, today]
+  );
+
+  const nextScreening = upcomingScreenings[0] ?? sortedScreenings[0];
+
+  const [selectedTime, setSelectedTime] = useState<string>(
+    todayScreenings[0]?.showTime ?? nextScreening?.showTime ?? ''
+  );
 
   const handleTimePress = (time: string) => {
     setSelectedTime(time);
@@ -45,19 +74,26 @@ export default function VerticalMovieCard({ movie, onPress, onTimePress }: Verti
           </View>
         </View>
         <View style={styles.chips}>
-          {DEFAULT_SLOTS.map((time) => {
-            const isSelected = time === selectedTime;
-            return (
-              <TouchableOpacity
-                key={time}
-                activeOpacity={0.8}
-                onPress={() => handleTimePress(time)}
-                style={[styles.chip, isSelected && styles.chipSelected]}
-              >
-                <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>{time}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {todayScreenings.length > 0 ? (
+            todayScreenings.map((screening) => {
+              const time = screening.showTime;
+              const isSelected = time === selectedTime;
+              return (
+                <TouchableOpacity
+                  key={screening.id}
+                  activeOpacity={0.8}
+                  onPress={() => handleTimePress(time)}
+                  style={[styles.chip, isSelected && styles.chipSelected]}
+                >
+                  <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>{time}</Text>
+                </TouchableOpacity>
+              );
+            })
+          ) : nextScreening ? (
+            <Text style={styles.nextSession}>
+              Prochaine séance : {formatScreeningDate(nextScreening.date)} à {nextScreening.showTime}
+            </Text>
+          ) : null}
         </View>
       </View>
     </TouchableOpacity>
@@ -142,5 +178,10 @@ const styles = StyleSheet.create({
   },
   chipTextSelected: {
     color: '#fff',
+  },
+  nextSession: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 13,
+    color: '#e2beba',
   },
 });

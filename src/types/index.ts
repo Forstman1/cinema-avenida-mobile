@@ -28,6 +28,7 @@ export interface Movie {
   duration: string;
   genre: string;
   poster: string | null;
+  screenings?: Screening[];
 }
 
 export interface Screening {
@@ -71,4 +72,26 @@ export interface Ticket {
   qrCode: string;
   status?: string;
   // Extend as needed
+}
+
+export interface AdminTopMovie {
+  title: string;
+  count: number;
+}
+
+export interface AdminQuickStats {
+  totalMovies: number;
+  totalScreeningsThisWeek: number;
+  pendingReservationsCount: number;
+}
+
+export interface AdminDashboard {
+  todayRevenue: number;
+  todayReservationsCount: number;
+  todayOccupancyRate: number;
+  weekRevenue: number;
+  weekReservationsCount: number;
+  weekOccupancyRate: number;
+  topMovieThisWeek: AdminTopMovie | null;
+  quickStats: AdminQuickStats;
 }

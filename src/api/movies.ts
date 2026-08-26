@@ -11,8 +11,8 @@ function ensurePoster(movie: Movie): Movie {
   return { ...movie, poster: getInternetPosterUrl(movie.id) };
 }
 
-export async function getMovies(): Promise<Movie[]> {
-  const response = await apiClient.get<Movie[]>('/movies');
+export async function getMovies(params?: { current?: boolean }): Promise<Movie[]> {
+  const response = await apiClient.get<Movie[]>('/movies', { params });
   return response.data.map(ensurePoster);
 }
 

@@ -18,6 +18,9 @@ import HorizontalMovieCard from '../components/HorizontalMovieCard';
 import VerticalMovieCard from '../components/VerticalMovieCard';
 import HomeSkeleton from '../components/HomeSkeleton';
 import ErrorState from '../components/ErrorState';
+import AdminDashboard from '../components/AdminDashboard';
+import { useAuth } from '../context/AuthContext';
+import { getTodayDateString, toISODate } from '../utils/date';
 import type { Movie } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 
@@ -25,16 +28,22 @@ type HomeNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
 
 export default function HomeScreen() {
   const navigation = useNavigation<HomeNavigationProp>();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
   const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
+  if (isAdmin) {
+    return <AdminDashboard />;
+  }
+
   const fetchMovies = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getMovies();
+      const data = await getMovies({ current: true });
       setMovies(data);
     } catch (err: any) {
       setError(err?.message ?? 'Impossible de charger les films.');
@@ -55,7 +64,14 @@ export default function HomeScreen() {
     return movies.filter((movie) => movie.title.toLowerCase().includes(query));
   }, [movies, searchQuery]);
 
-  const featuredMovies = useMemo(() => filteredMovies.slice(0, 5), [filteredMovies]);
+  const today = getTodayDateString();
+
+  const featuredMovies = useMemo(() => {
+    const todayMovies = filteredMovies.filter((movie) =>
+      movie.screenings?.some((screening) => toISODate(screening.date) === today)
+    );
+    return todayMovies.length > 0 ? todayMovies : filteredMovies;
+  }, [filteredMovies, today]);
 
   const handleMoviePress = (movie: Movie) => {
     navigation.navigate('MovieDetails', { movieId: movie.id });

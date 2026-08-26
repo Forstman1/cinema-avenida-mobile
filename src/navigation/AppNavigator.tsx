@@ -17,6 +17,7 @@ import PaymentScreen from '../screens/PaymentScreen';
 import TicketScreen from '../screens/TicketScreen';
 import AdminMoviesScreen from '../screens/AdminMoviesScreen';
 import AddMovieScreen from '../screens/AddMovieScreen';
+import ManageScreeningsScreen from '../screens/ManageScreeningsScreen';
 import type { AuthStackParamList, MainTabParamList, RootStackParamList } from '../types/navigation';
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -33,6 +34,9 @@ function AuthNavigator() {
 }
 
 function MainTabs() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -53,13 +57,27 @@ function MainTabs() {
           tabBarIcon: ({ color, size }) => <MaterialIcons name="home" color={color} size={size} />,
         }}
       />
-      <Tab.Screen
-        name="Mes Billets"
-        component={MyBookingsScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => <MaterialIcons name="confirmation-number" color={color} size={size} />,
-        }}
-      />
+      {isAdmin ? (
+        <Tab.Screen
+          name="Gestion"
+          component={AdminMoviesScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <MaterialIcons name="movie-creation" color={color} size={size} />
+            ),
+          }}
+        />
+      ) : (
+        <Tab.Screen
+          name="Mes Billets"
+          component={MyBookingsScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <MaterialIcons name="confirmation-number" color={color} size={size} />
+            ),
+          }}
+        />
+      )}
       <Tab.Screen
         name="Profil"
         component={ProfileScreen}
@@ -82,6 +100,7 @@ function RootNavigator() {
       <RootStack.Screen name="Ticket" component={TicketScreen} />
       <RootStack.Screen name="AdminMovies" component={AdminMoviesScreen} />
       <RootStack.Screen name="AddMovie" component={AddMovieScreen} />
+      <RootStack.Screen name="ManageScreenings" component={ManageScreeningsScreen} />
     </RootStack.Navigator>
   );
 }

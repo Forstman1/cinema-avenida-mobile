@@ -20,7 +20,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { cancelReservation, getMyReservations } from '../api/reservations';
 import ErrorState from '../components/ErrorState';
-import { formatScreeningDate } from '../utils/date';
+import { formatScreeningDate, getScreeningDateTime } from '../utils/date';
 import type { Reservation, Seat } from '../types';
 import type { MainTabParamList, RootStackParamList } from '../types/navigation';
 
@@ -29,9 +29,9 @@ type BookingsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Mai
 type TabType = 'upcoming' | 'history';
 
 function isUpcoming(reservation: Reservation): boolean {
-  if (reservation.status === 'CANCELLED') return false;
-  const screeningDate = new Date(reservation.screening?.date ?? 0);
-  return screeningDate.getTime() > Date.now();
+  if (reservation.status !== 'CONFIRMED') return false;
+  const screeningDateTime = getScreeningDateTime(reservation);
+  return !!screeningDateTime && screeningDateTime.getTime() > Date.now();
 }
 
 function getPendingReservation(reservations: Reservation[]): Reservation | null {
@@ -196,7 +196,8 @@ export default function MyBookingsScreen() {
     const movie = screening?.movie;
     const seats = reservation.reservationSeats?.map((rs) => rs.seat) ?? [];
     const dateLabel = screening ? formatScreeningDate(screening.date) : '-';
-    const isHistory = dimmed || reservation.status === 'CANCELLED';
+    const isCancelled = reservation.status === 'CANCELLED';
+    const isHistory = dimmed || isCancelled;
 
     return (
       <View key={reservation.id} style={[styles.card, isHistory && styles.cardDimmed]}>
@@ -220,7 +221,10 @@ export default function MyBookingsScreen() {
             <Text style={[styles.cardTitle, isHistory && styles.cardTextDimmed]} numberOfLines={2}>
               {movie?.title ?? 'Film'}
             </Text>
-            <Text style={styles.cardRoom}>Salle 1</Text>
+            <View style={styles.cardHeaderRight}>
+              {isCancelled && <Text style={styles.cancelledBadge}>ANNULÉ</Text>}
+              <Text style={styles.cardRoom}>Salle 1</Text>
+            </View>
           </View>
 
           <View style={styles.cardMeta}>
@@ -241,13 +245,15 @@ export default function MyBookingsScreen() {
           </View>
 
           <View style={styles.cardActions}>
-            <TouchableOpacity
-              style={[styles.viewTicketButton, isHistory && styles.viewTicketButtonDimmed]}
-              onPress={() => handleViewTicket(reservation)}
-              activeOpacity={0.9}
-            >
-              <Text style={styles.viewTicketButtonText}>Voir le billet</Text>
-            </TouchableOpacity>
+            {!isCancelled && (
+              <TouchableOpacity
+                style={[styles.viewTicketButton, isHistory && styles.viewTicketButtonDimmed]}
+                onPress={() => handleViewTicket(reservation)}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.viewTicketButtonText}>Voir le billet</Text>
+              </TouchableOpacity>
+            )}
             {!isHistory && (
               <TouchableOpacity
                 style={styles.cancelButton}
@@ -563,10 +569,25 @@ const styles = StyleSheet.create({
   cardTextDimmed: {
     color: '#999',
   },
+  cardHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   cardRoom: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 13,
     color: '#e2beba',
+  },
+  cancelledBadge: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 11,
+    color: '#fff',
+    backgroundColor: '#b22222',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    overflow: 'hidden',
   },
   cardMeta: {
     flexDirection: 'row',

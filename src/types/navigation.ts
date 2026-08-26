@@ -9,6 +9,7 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   Accueil: undefined;
   'Mes Billets': undefined;
+  Gestion: undefined;
   Profil: undefined;
 };
 
@@ -21,6 +22,7 @@ export type RootStackParamList = {
   Ticket: { movie: Movie; screening: Screening; reservation: Reservation; ticket: Ticket; seats: Seat[] };
   AdminMovies: undefined;
   AddMovie: { movie?: Movie } | undefined;
+  ManageScreenings: { movie: Movie };
 };
 
 export type LoginScreenProps = NativeStackScreenProps<AuthStackParamList, 'Login'>;
@@ -33,3 +35,4 @@ export type PaymentScreenProps = NativeStackScreenProps<RootStackParamList, 'Pay
 export type TicketScreenProps = NativeStackScreenProps<RootStackParamList, 'Ticket'>;
 export type AdminMoviesScreenProps = NativeStackScreenProps<RootStackParamList, 'AdminMovies'>;
 export type AddMovieScreenProps = NativeStackScreenProps<RootStackParamList, 'AddMovie'>;
+export type ManageScreeningsScreenProps = NativeStackScreenProps<RootStackParamList, 'ManageScreenings'>;

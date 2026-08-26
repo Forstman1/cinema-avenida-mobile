@@ -9,21 +9,15 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useAuth } from '../context/AuthContext';
-import type { RootStackParamList } from '../types/navigation';
 
 function getInitial(name: string): string {
   return name?.trim()?.charAt(0)?.toUpperCase() ?? '?';
 }
 
-type ProfileNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
-
 export default function ProfileScreen() {
-  const navigation = useNavigation<ProfileNavigationProp>();
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets();
 
@@ -71,20 +65,7 @@ export default function ProfileScreen() {
           <MaterialIcons name="chevron-right" size={20} color="#666" />
         </View>
 
-        {/* Admin entry — only visible for ADMIN users */}
-        {user?.role === 'ADMIN' && (
-          <TouchableOpacity
-            style={[styles.row, styles.adminRow]}
-            onPress={() => navigation.navigate('AdminMovies')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.rowIcon}>
-              <MaterialIcons name="movie" size={20} color="#e2beba" />
-            </View>
-            <Text style={styles.rowText}>🎬 Gestion des films</Text>
-            <MaterialIcons name="chevron-right" size={20} color="#e2beba" />
-          </TouchableOpacity>
-        )}
+        {/* Admin film management is now a top-level bottom tab. */}
       </View>
 
       {/* Logout button */}
