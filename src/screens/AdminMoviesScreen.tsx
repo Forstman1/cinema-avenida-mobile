@@ -1,8 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
-  Image,
   StatusBar,
   StyleSheet,
   Text,
@@ -10,12 +8,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { getMovies } from '../api/movies';
 import ErrorState from '../components/ErrorState';
+import PosterImage from '../components/PosterImage';
 import type { Movie } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 
@@ -41,9 +41,11 @@ export default function AdminMoviesScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchMovies();
-  }, [fetchMovies]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchMovies();
+    }, []),
+  );
 
   const handleAdd = () => {
     navigation.navigate('AddMovie');
@@ -53,31 +55,83 @@ export default function AdminMoviesScreen() {
     navigation.navigate('AddMovie', { movie });
   };
 
-  const handleManageScreenings = (movie: Movie) => {
-    navigation.navigate('ManageScreenings', { movie });
+  const handleProgramme = () => {
+    navigation.navigate('Programme');
   };
+
+  const renderHeader = (subtitle?: string) => (
+    <View style={styles.topBar}>
+      <View style={styles.topBarSpacer} />
+      <View style={styles.titleBlock}>
+        <Text style={styles.topBarTitle}>Gestion des Films</Text>
+        {subtitle ? <Text style={styles.topBarSubtitle}>{subtitle}</Text> : null}
+      </View>
+      <TouchableOpacity
+        style={styles.programmeButton}
+        onPress={handleProgramme}
+        activeOpacity={0.8}
+      >
+        <MaterialIcons name="calendar-month" size={22} color="#e5e2e1" />
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderSkeleton = () => (
+    <View style={styles.listContent}>
+      {[0, 1, 2, 3].map((index) => (
+        <View key={index} style={styles.skeletonCard}>
+          <View style={styles.skeletonMain}>
+            <View style={styles.skeletonPoster} />
+            <View style={styles.skeletonInfo}>
+              <View style={styles.skeletonLineWide} />
+              <View style={styles.skeletonLineShort} />
+              <View style={styles.skeletonLineShort} />
+            </View>
+          </View>
+          <View style={styles.skeletonActions} />
+        </View>
+      ))}
+    </View>
+  );
+
+  const renderEmpty = () => (
+    <View style={styles.emptyState}>
+      <View style={styles.emptyIconWrap}>
+        <MaterialIcons name="local-movies" size={30} color="#ffb4ac" />
+      </View>
+      <Text style={styles.emptyTitle}>Aucun film</Text>
+      <Text style={styles.emptyText}>
+        Ajoutez votre premier film au catalogue pour commencer.
+      </Text>
+    </View>
+  );
 
   const renderItem = ({ item }: { item: Movie }) => (
     <View style={styles.card}>
-      {item.poster ? (
-        <Image source={{ uri: item.poster }} style={styles.poster} />
-      ) : (
-        <View style={styles.posterPlaceholder}>
-          <Text style={styles.posterPlaceholderText}>Cinéma Avenida</Text>
+      <View style={styles.cardMain}>
+        <PosterImage
+          uri={item.poster}
+          title={item.title}
+          style={styles.poster}
+          borderRadius={12}
+        />
+        <View style={styles.info}>
+          <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+          <Text style={styles.genre} numberOfLines={1}>{item.genre}</Text>
+          <View style={styles.metaRow}>
+            <MaterialIcons name="schedule" size={13} color="#aa8986" />
+            <Text style={styles.metaText}>{item.duration}</Text>
+          </View>
         </View>
-      )}
-      <View style={styles.info}>
-        <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-        <Text style={styles.genre}>{item.genre}</Text>
       </View>
-      <View style={styles.actions}>
-        <TouchableOpacity style={[styles.actionButton, styles.editButton]} onPress={() => handleEdit(item)} activeOpacity={0.9}>
-          <MaterialIcons name="edit" size={16} color="#ffb4ac" />
-          <Text style={styles.editButtonText}>Modifier</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionButton, styles.screeningsButton]} onPress={() => handleManageScreenings(item)} activeOpacity={0.9}>
-          <MaterialIcons name="schedule" size={16} color="#e2beba" />
-          <Text style={styles.screeningsButtonText}>Séances</Text>
+      <View style={styles.cardActions}>
+        <TouchableOpacity
+          style={[styles.pillButton, styles.editPill]}
+          onPress={() => handleEdit(item)}
+          activeOpacity={0.85}
+        >
+          <MaterialIcons name="edit" size={14} color="#ffb4ac" />
+          <Text style={styles.editPillText}>Modifier</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -87,9 +141,8 @@ export default function AdminMoviesScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <View style={styles.skeleton}>
-          <ActivityIndicator size="large" color="#b22222" />
-        </View>
+        {renderHeader()}
+        {renderSkeleton()}
       </SafeAreaView>
     );
   }
@@ -98,11 +151,7 @@ export default function AdminMoviesScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <View style={styles.topBar}>
-          <View style={styles.topBarSpacer} />
-          <Text style={styles.topBarTitle}>Gestion des Films</Text>
-          <View style={styles.topBarSpacer} />
-        </View>
+        {renderHeader()}
         <ErrorState message={error} onRetry={fetchMovies} />
       </SafeAreaView>
     );
@@ -112,11 +161,7 @@ export default function AdminMoviesScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
-        <View style={styles.topBarSpacer} />
-        <Text style={styles.topBarTitle}>Gestion des Films</Text>
-        <View style={styles.topBarSpacer} />
-      </View>
+      {renderHeader(`${movies.length} film${movies.length > 1 ? 's' : ''} au catalogue`)}
 
       <FlatList
         data={movies}
@@ -124,6 +169,7 @@ export default function AdminMoviesScreen() {
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+        ListEmptyComponent={renderEmpty}
         showsVerticalScrollIndicator={false}
       />
 
@@ -132,7 +178,14 @@ export default function AdminMoviesScreen() {
         onPress={handleAdd}
         activeOpacity={0.9}
       >
-        <MaterialIcons name="add" size={28} color="#fff" />
+        <LinearGradient
+          colors={['#c22626', '#8f1818']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.fabGradient}
+        >
+          <MaterialIcons name="add" size={28} color="#fff" />
+        </LinearGradient>
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -143,107 +196,187 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#131313',
   },
-  skeleton: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  titleBlock: {
+    flex: 1,
+    alignItems: 'center',
   },
   topBarTitle: {
     fontFamily: 'EBGaramond-SemiBold',
-    fontSize: 20,
+    fontSize: 22,
     color: '#e5e2e1',
+  },
+  topBarSubtitle: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: '#aa8986',
+    marginTop: 3,
   },
   topBarSpacer: {
     width: 40,
   },
+  programmeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   listContent: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
+    paddingTop: 4,
     paddingBottom: 120,
   },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#201f1f',
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
     padding: 14,
+  },
+  cardMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 14,
   },
   poster: {
-    width: 56,
-    height: 80,
-    borderRadius: 8,
+    width: 64,
+    height: 92,
     backgroundColor: '#1a1a1a',
-  },
-  posterPlaceholder: {
-    width: 56,
-    height: 80,
-    borderRadius: 8,
-    backgroundColor: '#1a1a1a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 4,
-  },
-  posterPlaceholderText: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 9,
-    color: '#666',
-    textAlign: 'center',
   },
   info: {
     flex: 1,
     justifyContent: 'center',
+    gap: 5,
   },
   title: {
     fontFamily: 'EBGaramond-SemiBold',
-    fontSize: 20,
+    fontSize: 19,
     color: '#e5e2e1',
-    marginBottom: 4,
   },
   genre: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 11,
+    color: '#aa8986',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  metaText: {
     fontFamily: 'Inter-Regular',
     fontSize: 13,
     color: '#aa8986',
   },
-  actions: {
-    flexDirection: 'column',
-    gap: 8,
+  cardActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
   },
-  actionButton: {
+  pillButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    height: 38,
+    borderRadius: 19,
     borderWidth: 1,
   },
-  editButton: {
+  editPill: {
     backgroundColor: 'rgba(178,34,34,0.15)',
     borderColor: 'rgba(178,34,34,0.3)',
   },
-  editButtonText: {
+  editPillText: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 13,
     color: '#ffb4ac',
   },
-  screeningsButton: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderColor: 'rgba(255,255,255,0.1)',
+  skeletonCard: {
+    backgroundColor: '#201f1f',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    padding: 14,
+    marginBottom: 16,
   },
-  screeningsButtonText: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 13,
-    color: '#e2beba',
+  skeletonMain: {
+    flexDirection: 'row',
+    gap: 14,
+  },
+  skeletonPoster: {
+    width: 64,
+    height: 92,
+    borderRadius: 12,
+    backgroundColor: '#2a2a2a',
+  },
+  skeletonInfo: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 10,
+  },
+  skeletonLineWide: {
+    width: '70%',
+    height: 16,
+    borderRadius: 6,
+    backgroundColor: '#2a2a2a',
+  },
+  skeletonLineShort: {
+    width: '45%',
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#2a2a2a',
+  },
+  skeletonActions: {
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#2a2a2a',
+    marginTop: 14,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingTop: 90,
+    paddingHorizontal: 32,
+  },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(178,34,34,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(178,34,34,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    fontFamily: 'EBGaramond-SemiBold',
+    fontSize: 22,
+    color: '#e5e2e1',
+    marginTop: 18,
+  },
+  emptyText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: '#aa8986',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: 8,
   },
   fab: {
     position: 'absolute',
@@ -251,13 +384,17 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#b22222',
+    overflow: 'hidden',
+    shadowColor: '#b22222',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  fabGradient: {
+    width: 56,
+    height: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: 'rgba(0,0,0,0.5)',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 8,
   },
 });

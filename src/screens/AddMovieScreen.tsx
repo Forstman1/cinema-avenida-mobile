@@ -15,17 +15,11 @@ import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { createMovie, createScreening, getRawMovieById, updateMovie } from '../api/movies';
+import { createMovie, getRawMovieById, updateMovie } from '../api/movies';
 import type { RootStackParamList } from '../types/navigation';
 import type { AddMovieScreenProps } from '../types/navigation';
 
 type AddMovieNavigationProp = NativeStackNavigationProp<RootStackParamList, 'AddMovie'>;
-
-const TIME_SLOTS = ['18:00', '20:30', '22:30'];
-
-function toISODateString(date: Date): string {
-  return date.toISOString().split('T')[0];
-}
 
 export default function AddMovieScreen({ route }: AddMovieScreenProps) {
   const navigation = useNavigation<AddMovieNavigationProp>();
@@ -38,8 +32,6 @@ export default function AddMovieScreen({ route }: AddMovieScreenProps) {
   const [genre, setGenre] = useState('');
   const [synopsis, setSynopsis] = useState('');
   const [poster, setPoster] = useState('');
-  const [screeningDate, setScreeningDate] = useState(toISODateString(new Date()));
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   // In edit mode, fetch the raw movie to avoid the internet poster placeholder.
@@ -90,21 +82,7 @@ export default function AddMovieScreen({ route }: AddMovieScreenProps) {
         await updateMovie(editMovie.id, payload);
         Alert.alert('Film mis à jour', '', [{ text: 'OK', onPress: () => navigation.goBack() }]);
       } else {
-        const created = await createMovie(payload);
-        if (selectedSlot) {
-          try {
-            await createScreening({
-              movieId: created.id,
-              date: screeningDate,
-              showTime: selectedSlot,
-            });
-          } catch (screeningErr: any) {
-            Alert.alert(
-              'Séance non créée',
-              screeningErr?.response?.data?.message ?? 'La séance n\'a pas pu être créée.'
-            );
-          }
-        }
+        await createMovie(payload);
         Alert.alert('Film créé', '', [{ text: 'OK', onPress: () => navigation.goBack() }]);
       }
     } catch (err: any) {
@@ -194,42 +172,6 @@ export default function AddMovieScreen({ route }: AddMovieScreenProps) {
             textAlignVertical="top"
           />
         </View>
-
-        {!isEdit && (
-          <>
-            <Text style={styles.sectionTitle}>Séances</Text>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>Date</Text>
-              <TextInput
-                style={styles.input}
-                value={screeningDate}
-                onChangeText={setScreeningDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#666"
-                autoCapitalize="none"
-              />
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>Créneau</Text>
-              <View style={styles.slots}>
-                {TIME_SLOTS.map((slot) => (
-                  <TouchableOpacity
-                    key={slot}
-                    style={[styles.slot, selectedSlot === slot && styles.slotSelected]}
-                    onPress={() => setSelectedSlot((prev) => (prev === slot ? null : slot))}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.slotText, selectedSlot === slot && styles.slotTextSelected]}>
-                      {slot}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </>
-        )}
 
         <TouchableOpacity
           style={[styles.saveButton, (!isFormValid || loading) && styles.saveButtonDisabled]}
@@ -322,31 +264,6 @@ const styles = StyleSheet.create({
     minHeight: 120,
     paddingTop: 14,
     lineHeight: 22,
-  },
-  slots: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  slot: {
-    flex: 1,
-    backgroundColor: '#201f1f',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  slotSelected: {
-    backgroundColor: '#b22222',
-    borderColor: '#b22222',
-  },
-  slotText: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 15,
-    color: '#e5e2e1',
-  },
-  slotTextSelected: {
-    color: '#fff',
   },
   saveButton: {
     backgroundColor: '#b22222',

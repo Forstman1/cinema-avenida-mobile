@@ -18,6 +18,7 @@ import TicketScreen from '../screens/TicketScreen';
 import AdminMoviesScreen from '../screens/AdminMoviesScreen';
 import AddMovieScreen from '../screens/AddMovieScreen';
 import ManageScreeningsScreen from '../screens/ManageScreeningsScreen';
+import ProgrammeScreen from '../screens/ProgrammeScreen';
 import type { AuthStackParamList, MainTabParamList, RootStackParamList } from '../types/navigation';
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -101,6 +102,7 @@ function RootNavigator() {
       <RootStack.Screen name="AdminMovies" component={AdminMoviesScreen} />
       <RootStack.Screen name="AddMovie" component={AddMovieScreen} />
       <RootStack.Screen name="ManageScreenings" component={ManageScreeningsScreen} />
+      <RootStack.Screen name="Programme" component={ProgrammeScreen} />
     </RootStack.Navigator>
   );
 }

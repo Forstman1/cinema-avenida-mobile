@@ -23,6 +23,7 @@ export type RootStackParamList = {
   AdminMovies: undefined;
   AddMovie: { movie?: Movie } | undefined;
   ManageScreenings: { movie: Movie };
+  Programme: undefined;
 };
 
 export type LoginScreenProps = NativeStackScreenProps<AuthStackParamList, 'Login'>;
@@ -36,3 +37,4 @@ export type TicketScreenProps = NativeStackScreenProps<RootStackParamList, 'Tick
 export type AdminMoviesScreenProps = NativeStackScreenProps<RootStackParamList, 'AdminMovies'>;
 export type AddMovieScreenProps = NativeStackScreenProps<RootStackParamList, 'AddMovie'>;
 export type ManageScreeningsScreenProps = NativeStackScreenProps<RootStackParamList, 'ManageScreenings'>;
+export type ProgrammeScreenProps = NativeStackScreenProps<RootStackParamList, 'Programme'>;

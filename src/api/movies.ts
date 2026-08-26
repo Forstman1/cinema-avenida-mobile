@@ -59,3 +59,8 @@ export async function createScreening(payload: ScreeningPayload): Promise<Screen
   const response = await apiClient.post<Screening>('/screenings', payload);
   return response.data;
 }
+
+export async function getScreeningsByDate(date: string): Promise<Screening[]> {
+  const response = await apiClient.get<Screening[]>('/screenings', { params: { date } });
+  return response.data;
+}
