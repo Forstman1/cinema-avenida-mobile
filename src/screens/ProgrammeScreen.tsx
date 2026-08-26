@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Modal,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -12,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { createScreening, getMovies, getScreeningsByDate } from '../api/movies';
@@ -79,6 +80,7 @@ export default function ProgrammeScreen() {
   const [schedule, setSchedule] = useState<Screening[]>([]);
   const [loadingSchedule, setLoadingSchedule] = useState(true);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [movies, setMovies] = useState<Movie[]>([]);
   const [moviesMap, setMoviesMap] = useState<Record<number, Movie>>({});
@@ -132,9 +134,18 @@ export default function ProgrammeScreen() {
     }
   }, [selectedDateString]);
 
-  useEffect(() => {
-    fetchSchedule();
-  }, [fetchSchedule]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchSchedule();
+      fetchMovies();
+    }, [fetchSchedule, fetchMovies]),
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([fetchSchedule(), fetchMovies()]);
+    setRefreshing(false);
+  }, [fetchSchedule, fetchMovies]);
 
   const slots = useMemo(() => {
     return TIME_SLOTS.map((time) => {
@@ -243,6 +254,9 @@ export default function ProgrammeScreen() {
           { paddingBottom: insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#b22222" />
+        }
       >
         <View style={styles.weekStrip}>
           <TouchableOpacity

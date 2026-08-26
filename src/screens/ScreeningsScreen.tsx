@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   ImageBackground,
@@ -23,15 +23,94 @@ import type { ScreeningsScreenProps } from '../types/navigation';
 
 type ScreeningsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Screenings'>;
 
+const WEEKDAY_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+const MONTH_NAMES = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+];
+
+function toISODateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getStartOfWeek(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function parseISODate(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function formatSelectedDate(date: Date): string {
+  const weekday = date.toLocaleDateString('fr-FR', { weekday: 'long' });
+  const capitalized = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+  return `${capitalized} ${date.getDate()} ${MONTH_NAMES[date.getMonth()]}`;
+}
+
 export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
   const navigation = useNavigation<ScreeningsNavigationProp>();
   const insets = useSafeAreaInsets();
   const { movie } = route.params;
 
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+  const weekStart = useMemo(() => getStartOfWeek(today), [today]);
+  const weekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
+    [weekStart]
+  );
+
   const [screenings, setScreenings] = useState<Screening[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  const groupedScreenings = useMemo(() => {
+    const map: Record<string, Screening[]> = {};
+    screenings.forEach((screening) => {
+      const key = screening.date;
+      if (!map[key]) {
+        map[key] = [];
+      }
+      map[key].push(screening);
+    });
+    Object.values(map).forEach((list) => {
+      list.sort((a, b) => a.showTime.localeCompare(b.showTime));
+    });
+    return map;
+  }, [screenings]);
+
+  const daysWithScreenings = useMemo(
+    () => weekDays.map((d) => toISODateString(d)).filter((date) => groupedScreenings[date]?.length > 0),
+    [weekDays, groupedScreenings]
+  );
+
+  const currentDayScreenings = useMemo(() => {
+    if (!selectedDate) return [];
+    return groupedScreenings[selectedDate] ?? [];
+  }, [selectedDate, groupedScreenings]);
 
   const fetchScreenings = useCallback(async () => {
     setLoading(true);
@@ -39,9 +118,6 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
     try {
       const data = await getScreeningsByMovieId(movie.id);
       setScreenings(data);
-      if (data.length > 0) {
-        setSelectedId(data[0].id);
-      }
     } catch (err: any) {
       setError(err?.message ?? 'Impossible de charger les séances.');
     } finally {
@@ -53,9 +129,26 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
     fetchScreenings();
   }, [fetchScreenings]);
 
+  useEffect(() => {
+    if (selectedDate) return;
+    if (daysWithScreenings.length === 0) return;
+
+    const todayStr = toISODateString(today);
+    if (daysWithScreenings.includes(todayStr)) {
+      setSelectedDate(todayStr);
+    } else {
+      setSelectedDate(daysWithScreenings[0]);
+    }
+  }, [daysWithScreenings, selectedDate, today]);
+
+  const handleDayPress = useCallback((dateString: string) => {
+    setSelectedDate(dateString);
+    setSelectedId(null);
+  }, []);
+
   const handleContinue = () => {
     if (!selectedId) return;
-    const screening = screenings.find((s) => s.id === selectedId);
+    const screening = currentDayScreenings.find((s) => s.id === selectedId);
     if (!screening) return;
     navigation.navigate('SeatMap', { movie, screening });
   };
@@ -63,9 +156,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
   const renderCard = (screening: Screening) => {
     const isSelected = screening.id === selectedId;
     const availableSeats =
-      typeof screening.availableSeats === 'number'
-        ? screening.availableSeats
-        : 120;
+      typeof screening.availableSeats === 'number' ? screening.availableSeats : 120;
 
     return (
       <TouchableOpacity
@@ -152,7 +243,9 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
               >
                 <Text style={styles.bannerTitle}>{movie.title}</Text>
                 <Text style={styles.bannerSubtitle}>
-                  Sélectionnez une séance pour aujourd'hui
+                  {selectedDate
+                    ? `Sélectionnez une séance — ${formatSelectedDate(parseISODate(selectedDate))}`
+                    : 'Sélectionnez une séance'}
                 </Text>
               </LinearGradient>
             </ImageBackground>
@@ -160,16 +253,47 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
             <View style={styles.bannerPlaceholder}>
               <Text style={styles.bannerTitle}>{movie.title}</Text>
               <Text style={styles.bannerSubtitle}>
-                Sélectionnez une séance pour aujourd'hui
+                {selectedDate
+                  ? `Sélectionnez une séance — ${formatSelectedDate(parseISODate(selectedDate))}`
+                  : 'Sélectionnez une séance'}
               </Text>
             </View>
           )}
         </View>
 
+        {/* Day strip */}
+        {daysWithScreenings.length > 0 && (
+          <View style={styles.weekStrip}>
+            <View style={styles.daysRow}>
+              {daysWithScreenings.map((dateString) => {
+                const date = parseISODate(dateString);
+                const selected = dateString === selectedDate;
+                const weekdayIndex = (date.getDay() + 6) % 7;
+
+                return (
+                  <TouchableOpacity
+                    key={dateString}
+                    style={[styles.dayButton, selected && styles.dayButtonSelected]}
+                    onPress={() => handleDayPress(dateString)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.dayLabel, selected && styles.dayLabelSelected]}>
+                      {WEEKDAY_SHORT[weekdayIndex]}
+                    </Text>
+                    <Text style={[styles.dayNumber, selected && styles.dayNumberSelected]}>
+                      {date.getDate()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
         {/* Screening cards */}
         <View style={styles.cards}>
-          {screenings.length > 0 ? (
-            screenings.map(renderCard)
+          {currentDayScreenings.length > 0 ? (
+            currentDayScreenings.map(renderCard)
           ) : (
             <Text style={styles.emptyText}>Aucune séance disponible.</Text>
           )}
@@ -283,6 +407,49 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     fontSize: 14,
     color: '#e2beba',
+  },
+  weekStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    marginTop: 24,
+  },
+  daysRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dayButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 38,
+    height: 54,
+    borderRadius: 12,
+    backgroundColor: '#201f1f',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  dayButtonSelected: {
+    backgroundColor: '#b22222',
+    borderColor: '#b22222',
+  },
+  dayLabel: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 11,
+    color: '#aa8986',
+    textTransform: 'uppercase',
+  },
+  dayLabelSelected: {
+    color: '#ffb4ac',
+  },
+  dayNumber: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: '#e5e2e1',
+    marginTop: 4,
+  },
+  dayNumberSelected: {
+    color: '#fff',
   },
   cards: {
     paddingHorizontal: 24,

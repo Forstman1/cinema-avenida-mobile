@@ -1,21 +1,23 @@
 import React from 'react';
 import { ImageBackground, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import type { Movie } from '../types';
+import { getNextScreening } from '../utils/date';
+import type { Movie, Screening } from '../types';
 
 interface HorizontalMovieCardProps {
   movie: Movie;
-  onPress: (movie: Movie) => void;
+  onPress: (movie: Movie, screening?: Screening) => void;
   isNew?: boolean;
 }
 
 export default function HorizontalMovieCard({ movie, onPress, isNew = false }: HorizontalMovieCardProps) {
   const hasPoster = Boolean(movie.poster);
+  const nextScreening = getNextScreening(movie.screenings ?? []);
 
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      onPress={() => onPress(movie)}
+      onPress={() => onPress(movie, nextScreening ?? undefined)}
       style={styles.container}
     >
       {hasPoster ? (

@@ -20,8 +20,8 @@ import HomeSkeleton from '../components/HomeSkeleton';
 import ErrorState from '../components/ErrorState';
 import AdminDashboard from '../components/AdminDashboard';
 import { useAuth } from '../context/AuthContext';
-import { getTodayDateString, toISODate } from '../utils/date';
-import type { Movie } from '../types';
+import { getNextScreening, getTodayDateString, toISODate } from '../utils/date';
+import type { Movie, Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 
 type HomeNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
@@ -38,6 +38,10 @@ export default function HomeScreen() {
   if (isAdmin) {
     return <AdminDashboard />;
   }
+
+  const getMovieNextScreening = useCallback((movie: Movie) => {
+    return getNextScreening(movie.screenings ?? []);
+  }, []);
 
   const fetchMovies = useCallback(async () => {
     setLoading(true);
@@ -67,14 +71,13 @@ export default function HomeScreen() {
   const today = getTodayDateString();
 
   const featuredMovies = useMemo(() => {
-    const todayMovies = filteredMovies.filter((movie) =>
+    return filteredMovies.filter((movie) =>
       movie.screenings?.some((screening) => toISODate(screening.date) === today)
     );
-    return todayMovies.length > 0 ? todayMovies : filteredMovies;
   }, [filteredMovies, today]);
 
-  const handleMoviePress = (movie: Movie) => {
-    navigation.navigate('MovieDetails', { movieId: movie.id });
+  const handleMoviePress = (movie: Movie, screening?: Screening) => {
+    navigation.navigate('MovieDetails', { movieId: movie.id, screening });
   };
 
   const handleTimePress = (movie: Movie, _time: string) => {
@@ -112,7 +115,7 @@ export default function HomeScreen() {
             )}
           />
         ) : (
-          <Text style={styles.emptyText}>Aucun film trouvé.</Text>
+          <Text style={styles.emptyText}>Aucune séance aujourd’hui</Text>
         )}
       </View>
 

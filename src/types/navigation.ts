@@ -15,7 +15,7 @@ export type MainTabParamList = {
 
 export type RootStackParamList = {
   Main: undefined;
-  MovieDetails: { movieId: number };
+  MovieDetails: { movieId: number; screening?: Screening };
   Screenings: { movie: Movie };
   SeatMap: { movie: Movie; screening: Screening };
   Payment: { movie: Movie; screening: Screening; reservation: Reservation; seats: Seat[] };

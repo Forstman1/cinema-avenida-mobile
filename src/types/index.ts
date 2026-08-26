@@ -36,7 +36,7 @@ export interface Screening {
   date: string;
   showTime: string;
   movieId: number;
-  availableSeats: number;
+  availableSeats?: number;
 }
 
 export type SeatStatus = 'LIBRE' | 'OCCUPE' | 'VERROUILLE';

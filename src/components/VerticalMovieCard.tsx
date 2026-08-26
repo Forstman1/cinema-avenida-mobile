@@ -2,22 +2,13 @@ import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import PosterImage from './PosterImage';
-import { formatScreeningDate, getTodayDateString, toISODate } from '../utils/date';
-import type { Movie } from '../types';
+import { formatScreeningDate, getNextScreening, getTodayDateString, toISODate } from '../utils/date';
+import type { Movie, Screening } from '../types';
 
 interface VerticalMovieCardProps {
   movie: Movie;
-  onPress: (movie: Movie) => void;
+  onPress: (movie: Movie, nextScreening?: Screening) => void;
   onTimePress?: (movie: Movie, time: string) => void;
-}
-
-function compareScreeningsByDateTime(a: NonNullable<Movie['screenings']>[number], b: NonNullable<Movie['screenings']>[number]): number {
-  const dateA = toISODate(a.date);
-  const dateB = toISODate(b.date);
-  if (dateA !== dateB) {
-    return dateA.localeCompare(dateB);
-  }
-  return a.showTime.localeCompare(b.showTime);
 }
 
 export default function VerticalMovieCard({ movie, onPress, onTimePress }: VerticalMovieCardProps) {
@@ -25,7 +16,12 @@ export default function VerticalMovieCard({ movie, onPress, onTimePress }: Verti
 
   const sortedScreenings = useMemo(() => {
     const list = movie.screenings ?? [];
-    return [...list].sort(compareScreeningsByDateTime);
+    return [...list].sort((a, b) => {
+      const dateA = toISODate(a.date);
+      const dateB = toISODate(b.date);
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
+      return a.showTime.localeCompare(b.showTime);
+    });
   }, [movie.screenings]);
 
   const todayScreenings = useMemo(
@@ -33,12 +29,10 @@ export default function VerticalMovieCard({ movie, onPress, onTimePress }: Verti
     [sortedScreenings, today]
   );
 
-  const upcomingScreenings = useMemo(
-    () => sortedScreenings.filter((screening) => toISODate(screening.date) >= today),
-    [sortedScreenings, today]
+  const nextScreening = useMemo(
+    () => getNextScreening(sortedScreenings),
+    [sortedScreenings]
   );
-
-  const nextScreening = upcomingScreenings[0] ?? sortedScreenings[0];
 
   const [selectedTime, setSelectedTime] = useState<string>(
     todayScreenings[0]?.showTime ?? nextScreening?.showTime ?? ''
@@ -52,7 +46,7 @@ export default function VerticalMovieCard({ movie, onPress, onTimePress }: Verti
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      onPress={() => onPress(movie)}
+      onPress={() => onPress(movie, nextScreening ?? undefined)}
       style={styles.container}
     >
       <PosterImage

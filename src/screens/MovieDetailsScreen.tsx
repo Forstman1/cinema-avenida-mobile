@@ -17,7 +17,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { getMovieById, getScreeningsByMovieId } from '../api/movies';
 import ErrorState from '../components/ErrorState';
-import { formatDuration, formatScreeningDate } from '../utils/date';
+import { formatDuration, formatScreeningDate, getNextScreening } from '../utils/date';
 import { useAuth } from '../context/AuthContext';
 import type { Movie, Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
@@ -29,7 +29,7 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
   const navigation = useNavigation<DetailsNavigationProp>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { movieId } = route.params;
+  const { movieId, screening: suggestedScreening } = route.params;
 
   const [movie, setMovie] = useState<Movie | null>(null);
   const [screenings, setScreenings] = useState<Screening[]>([]);
@@ -58,16 +58,15 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
   }, [fetchData]);
 
   const nextScreening = useMemo(() => {
-    if (!screenings.length) return null;
-    const sorted = [...screenings].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
-    return sorted[0];
-  }, [screenings]);
+    if (suggestedScreening && screenings.some((s) => s.id === suggestedScreening.id)) {
+      return suggestedScreening;
+    }
+    return getNextScreening(screenings);
+  }, [screenings, suggestedScreening]);
 
   const handleReserve = () => {
-    if (!movie) return;
-    navigation.navigate('Screenings', { movie });
+    if (!movie || !nextScreening) return;
+    navigation.navigate('SeatMap', { movie, screening: nextScreening });
   };
 
   if (loading) {
@@ -175,10 +174,10 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
           </View>
         ) : (
           <TouchableOpacity
-            style={[styles.reserveButton, !screenings.length && styles.reserveButtonDisabled]}
+            style={[styles.reserveButton, !nextScreening && styles.reserveButtonDisabled]}
             onPress={handleReserve}
             activeOpacity={0.9}
-            disabled={!screenings.length}
+            disabled={!nextScreening}
           >
             <Text style={styles.reserveButtonText}>Réserver</Text>
             <MaterialIcons name="confirmation-number" size={20} color="#fff" />

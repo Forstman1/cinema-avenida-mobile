@@ -1,4 +1,4 @@
-import type { Reservation } from '../types';
+import type { Reservation, Screening } from '../types';
 
 const WEEKDAYS = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'];
 const MONTHS = ['Jan.', 'Fév.', 'Mar.', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'];
@@ -69,4 +69,42 @@ export function formatDuration(minutesValue: string | number): string {
   if (hours === 0) return `${minutes}min`;
   if (minutes === 0) return `${hours}h`;
   return `${hours}h ${minutes}min`;
+}
+
+function compareScreeningsByDateTime(a: Screening, b: Screening): number {
+  const dateA = toISODate(a.date);
+  const dateB = toISODate(b.date);
+  if (dateA !== dateB) {
+    return dateA.localeCompare(dateB);
+  }
+  return a.showTime.localeCompare(b.showTime);
+}
+
+export function getNextScreening(screenings: Screening[]): Screening | null {
+  if (!screenings.length) return null;
+  const today = getTodayDateString();
+  const sorted = [...screenings].sort(compareScreeningsByDateTime);
+  return sorted.find((screening) => toISODate(screening.date) >= today) ?? sorted[0];
+}
+
+export function toISODateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function getRemainingDaysOfWeek(): Date[] {
+  const days: Date[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const currentDay = today.getDay();
+  const daysUntilSunday = currentDay === 0 ? 0 : 7 - currentDay;
+  for (let i = 0; i <= daysUntilSunday; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    d.setHours(0, 0, 0, 0);
+    days.push(d);
+  }
+  return days;
 }
