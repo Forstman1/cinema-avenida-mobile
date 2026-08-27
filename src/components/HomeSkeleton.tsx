@@ -16,17 +16,21 @@ export default function HomeSkeleton() {
         <View style={styles.day} />
         <View style={styles.day} />
       </View>
-      <View style={styles.selectedDate} />
+      <View style={styles.dateSummary} />
 
-      {/* Vertical cards skeleton */}
-      <View style={styles.verticalCard}>
-        <View style={styles.verticalPoster} />
-        <View style={styles.verticalContent}>
-          <View style={styles.verticalTitle} />
-          <View style={styles.verticalMeta} />
-          <View style={styles.verticalChips} />
+      {/* Featured movie skeleton */}
+      <View style={styles.featuredCard}>
+        <View style={styles.featuredContent}>
+          <View style={styles.featuredTitle} />
+          <View style={styles.featuredMeta} />
+          <View style={styles.featuredTimes} />
+          <View style={styles.featuredAction} />
         </View>
       </View>
+
+      <View style={styles.remainingTitle} />
+
+      {/* Compact movie cards skeleton */}
       <View style={styles.verticalCard}>
         <View style={styles.verticalPoster} />
         <View style={styles.verticalContent}>
@@ -42,15 +46,15 @@ export default function HomeSkeleton() {
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 100,
+    paddingTop: 10,
+    paddingBottom: 116,
   },
   header: {
     width: 180,
     height: 32,
     backgroundColor: '#201f1f',
     borderRadius: 6,
-    marginBottom: 28,
+    marginBottom: 18,
   },
   sectionTitle: {
     width: 220,
@@ -62,7 +66,7 @@ const styles = StyleSheet.create({
   daysRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 24,
+    marginBottom: 15,
   },
   day: {
     width: 64,
@@ -70,24 +74,66 @@ const styles = StyleSheet.create({
     backgroundColor: '#201f1f',
     borderRadius: 10,
   },
-  selectedDate: {
-    width: 200,
-    height: 24,
+  dateSummary: {
+    width: 230,
+    height: 16,
     backgroundColor: '#201f1f',
     borderRadius: 6,
-    marginBottom: 16,
+    marginBottom: 13,
+  },
+  featuredCard: {
+    minHeight: 330,
+    justifyContent: 'flex-end',
+    padding: 18,
+    backgroundColor: '#201f1f',
+    borderRadius: 22,
+  },
+  featuredContent: {
+    gap: 10,
+  },
+  featuredTitle: {
+    width: '72%',
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#2a2a2a',
+  },
+  featuredMeta: {
+    width: '48%',
+    height: 14,
+    borderRadius: 5,
+    backgroundColor: '#2a2a2a',
+  },
+  featuredTimes: {
+    width: '64%',
+    height: 34,
+    borderRadius: 9,
+    backgroundColor: '#2a2a2a',
+  },
+  featuredAction: {
+    width: 140,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#2a2a2a',
+  },
+  remainingTitle: {
+    width: 170,
+    height: 21,
+    marginTop: 24,
+    marginBottom: 12,
+    borderRadius: 6,
+    backgroundColor: '#201f1f',
   },
   verticalCard: {
     flexDirection: 'row',
     backgroundColor: '#201f1f',
     borderRadius: 16,
-    padding: 12,
-    gap: 16,
-    marginBottom: 16,
+    padding: 10,
+    gap: 13,
+    marginBottom: 12,
   },
   verticalPoster: {
-    width: 90,
-    height: 130,
+    width: 84,
+    height: 126,
     backgroundColor: '#2a2a2a',
     borderRadius: 10,
   },

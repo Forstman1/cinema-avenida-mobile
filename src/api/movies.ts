@@ -1,24 +1,19 @@
 import apiClient from './client';
 import type { Movie, Screening } from '../types';
 
-// In development, use public internet images as posters until the backend stores real ones.
-function getInternetPosterUrl(id: number): string {
-  const safeId = encodeURIComponent(String(id));
-  return `https://picsum.photos/seed/${safeId}/400/600`;
-}
-
-function ensurePoster(movie: Movie): Movie {
-  return { ...movie, poster: getInternetPosterUrl(movie.id) };
+function preservePoster(movie: Movie): Movie {
+  const poster = typeof movie.poster === 'string' ? movie.poster.trim() : null;
+  return { ...movie, poster: poster || null };
 }
 
 export async function getMovies(params?: { current?: boolean }): Promise<Movie[]> {
   const response = await apiClient.get<Movie[]>('/movies', { params });
-  return response.data.map(ensurePoster);
+  return response.data.map(preservePoster);
 }
 
 export async function getMovieById(id: number): Promise<Movie> {
   const response = await apiClient.get<Movie>(`/movies/${id}`);
-  return ensurePoster(response.data);
+  return preservePoster(response.data);
 }
 
 export async function getScreeningsByMovieId(id: number): Promise<Screening[]> {

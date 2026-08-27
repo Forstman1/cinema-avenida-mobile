@@ -88,7 +88,7 @@ export function formatDuration(minutesValue: string | number): string {
 
   if (hours === 0) return `${minutes}min`;
   if (minutes === 0) return `${hours}h`;
-  return `${hours}h ${minutes}min`;
+  return `${hours}h${String(minutes).padStart(2, '0')}`;
 }
 
 function compareScreeningsByDateTime(a: Screening, b: Screening): number {

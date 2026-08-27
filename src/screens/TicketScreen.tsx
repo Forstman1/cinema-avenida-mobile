@@ -1,7 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
-  ActivityIndicator,
-  Image,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -12,9 +10,9 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
-import QRCode from 'qrcode';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+import NativeQRCode from '../components/NativeQRCode';
 import { formatScreeningDate } from '../utils/date';
 import type { RootStackParamList } from '../types/navigation';
 import type { TicketScreenProps } from '../types/navigation';
@@ -33,23 +31,6 @@ export default function TicketScreen({ route }: TicketScreenProps) {
   const navigation = useNavigation<TicketNavigationProp>();
   const insets = useSafeAreaInsets();
   const { movie, screening, reservation, ticket, seats } = route.params;
-
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [qrError, setQrError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    QRCode.toDataURL(ticket.qrCode, { width: 180, margin: 2 })
-      .then((url) => {
-        if (!cancelled) setQrDataUrl(url);
-      })
-      .catch(() => {
-        if (!cancelled) setQrError('Impossible de générer le QR code.');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [ticket.qrCode]);
 
   const seatLabels = useMemo(() => seats.map((s) => `${s.row}${s.number}`), [seats]);
   const zoneLabel = useMemo(() => formatZoneLabel(seats), [seats]);
@@ -122,13 +103,7 @@ export default function TicketScreen({ route }: TicketScreenProps) {
 
           {/* QR code */}
           <View style={styles.qrWrapper}>
-            {qrDataUrl ? (
-              <Image source={{ uri: qrDataUrl }} style={styles.qrImage} />
-            ) : qrError ? (
-              <Text style={styles.qrError}>{qrError}</Text>
-            ) : (
-              <ActivityIndicator size="small" color="#b22222" />
-            )}
+            <NativeQRCode value={ticket.qrCode} size={180} />
           </View>
         </View>
 
@@ -274,16 +249,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     minWidth: 212,
     minHeight: 212,
-  },
-  qrImage: {
-    width: 180,
-    height: 180,
-  },
-  qrError: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 12,
-    color: '#b22222',
-    textAlign: 'center',
   },
   hint: {
     fontFamily: 'Inter-Regular',
