@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
   ActivityIndicator,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -9,30 +10,45 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, type CompositeNavigationProp } from '@react-navigation/native';
+import {
+  useFocusEffect,
+  useNavigation,
+  type CompositeNavigationProp,
+} from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { getAdminDashboard } from '../api/admin';
 import { useAuth } from '../context/AuthContext';
 import CircularProgress from './CircularProgress';
 import ErrorState from './ErrorState';
-import type { AdminDashboard as AdminDashboardType } from '../types';
 import type { MainTabParamList, RootStackParamList } from '../types/navigation';
+import { useAdminDashboardStore } from '../store/adminDashboardStore';
 
 type AdminHomeNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Accueil'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
-function formatCurrency(value: number): string {
-  return `${value.toLocaleString('fr-MA')} DH`;
+function toSafeNumber(value: number | null | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-function pluralize(count: number, singular: string, plural: string): string {
-  return count > 1 ? plural : singular;
+function formatCurrency(value: number | null | undefined): string {
+  return `${toSafeNumber(value).toLocaleString('fr-MA')} DH`;
+}
+
+function pluralize(
+  count: number | null | undefined,
+  singular: string,
+  plural: string,
+): string {
+  return toSafeNumber(count) > 1 ? plural : singular;
+}
+
+function clampPercentage(value: number | null | undefined): number {
+  return Math.max(0, Math.min(100, toSafeNumber(value)));
 }
 
 interface QuickStatProps {
@@ -55,26 +71,17 @@ export default function AdminDashboard() {
   const navigation = useNavigation<AdminHomeNavigationProp>();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const [data, setData] = useState<AdminDashboardType | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const dashboard = useAdminDashboardStore((state) => state.dashboard);
+  const isLoading = useAdminDashboardStore((state) => state.isLoading);
+  const isRefreshing = useAdminDashboardStore((state) => state.isRefreshing);
+  const error = useAdminDashboardStore((state) => state.error);
+  const refreshDashboard = useAdminDashboardStore((state) => state.refreshDashboard);
 
-  const fetchDashboard = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await getAdminDashboard();
-      setData(result);
-    } catch (err: any) {
-      setError(err?.message ?? 'Impossible de charger le tableau de bord.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchDashboard();
-  }, [fetchDashboard]);
+  useFocusEffect(
+    useCallback(() => {
+      void refreshDashboard();
+    }, [refreshDashboard]),
+  );
 
   const handleManageMovies = () => {
     navigation.navigate('Gestion');
@@ -84,7 +91,19 @@ export default function AdminDashboard() {
     navigation.navigate('AddMovie');
   };
 
-  if (loading) {
+  if (user?.role !== 'ADMIN') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <ErrorState
+          message="Accès réservé aux administrateurs."
+          onRetry={() => undefined}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  if (isLoading && !dashboard) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
@@ -95,17 +114,25 @@ export default function AdminDashboard() {
     );
   }
 
-  if (error || !data) {
+  if (error || !dashboard) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <ErrorState message={error ?? 'Erreur inconnue.'} onRetry={fetchDashboard} />
+        <ErrorState
+          message={error ?? 'Erreur inconnue.'}
+          onRetry={() => void refreshDashboard()}
+        />
       </SafeAreaView>
     );
   }
 
-  const weekOccupancy = Math.max(0, Math.min(100, data.weekOccupancyRate));
-  const roleLabel = user?.role === 'admin' ? 'Administrateur' : user?.role ?? 'Administrateur';
+  const todayOccupancy = clampPercentage(dashboard.todayOccupancyRate);
+  const weekOccupancy = clampPercentage(dashboard.weekOccupancyRate);
+  const quickStats = dashboard.quickStats ?? {
+    totalMovies: 0,
+    totalScreeningsThisWeek: 0,
+    pendingReservationsCount: 0,
+  };
   const rawDate = new Date().toLocaleDateString('fr-FR', {
     weekday: 'long',
     day: 'numeric',
@@ -122,12 +149,19 @@ export default function AdminDashboard() {
           { paddingBottom: insets.bottom + 100 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => void refreshDashboard()}
+            tintColor="#b22222"
+          />
+        }
       >
         <View style={styles.header}>
           <View style={styles.headerText}>
             <Text style={styles.greeting}>Bonjour, {user?.name ?? 'Admin'}</Text>
             <Text style={styles.subtitle}>
-              {roleLabel} · {dateLabel}
+              Administrateur · {dateLabel}
             </Text>
           </View>
           <TouchableOpacity style={styles.profileButton} activeOpacity={0.8}>
@@ -148,30 +182,30 @@ export default function AdminDashboard() {
             style={styles.heroWatermark}
           />
           <Text style={styles.heroLabel}>Recettes du jour</Text>
-          <Text style={styles.heroValue}>{formatCurrency(data.todayRevenue)}</Text>
+          <Text style={styles.heroValue}>{formatCurrency(dashboard.todayRevenue)}</Text>
           <View style={styles.heroChip}>
             <MaterialIcons name="confirmation-number" size={14} color="#ffd7d3" />
             <Text style={styles.heroChipText}>
-              {data.todayReservationsCount}{' '}
-              {pluralize(data.todayReservationsCount, 'réservation', 'réservations')}
+              {toSafeNumber(dashboard.todayReservationsCount)}{' '}
+              {pluralize(dashboard.todayReservationsCount, 'réservation', 'réservations')}
             </Text>
           </View>
         </LinearGradient>
 
         <View style={styles.occupancyRow}>
           <View style={[styles.card, styles.occupancyTodayCard]}>
-            <CircularProgress progress={data.todayOccupancyRate} size={84} strokeWidth={8} />
+            <CircularProgress progress={todayOccupancy} size={84} strokeWidth={8} />
             <Text style={styles.cardCaption}>Aujourd'hui</Text>
           </View>
           <View style={[styles.card, styles.occupancyWeekCard]}>
             <Text style={styles.cardCaption}>Occupation · 7 jours</Text>
-            <Text style={styles.occupancyWeekValue}>{data.weekOccupancyRate}%</Text>
+            <Text style={styles.occupancyWeekValue}>{Math.round(weekOccupancy)}%</Text>
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${weekOccupancy}%` }]} />
             </View>
             <Text style={styles.occupancyWeekDetail}>
-              {data.weekReservationsCount}{' '}
-              {pluralize(data.weekReservationsCount, 'réservation', 'réservations')} cette semaine
+              {toSafeNumber(dashboard.weekReservationsCount)}{' '}
+              {pluralize(dashboard.weekReservationsCount, 'réservation', 'réservations')} cette semaine
             </Text>
           </View>
         </View>
@@ -183,17 +217,17 @@ export default function AdminDashboard() {
           </View>
           <View style={styles.weekStatsRow}>
             <View style={styles.weekStat}>
-              <Text style={styles.weekStatValue}>{formatCurrency(data.weekRevenue)}</Text>
+              <Text style={styles.weekStatValue}>{formatCurrency(dashboard.weekRevenue)}</Text>
               <Text style={styles.weekStatLabel}>Recettes</Text>
             </View>
             <View style={styles.weekStatDivider} />
             <View style={styles.weekStat}>
-              <Text style={styles.weekStatValue}>{data.weekReservationsCount}</Text>
+              <Text style={styles.weekStatValue}>{toSafeNumber(dashboard.weekReservationsCount)}</Text>
               <Text style={styles.weekStatLabel}>Réservations</Text>
             </View>
           </View>
           <View style={styles.weekDivider} />
-          {data.topMovieThisWeek ? (
+          {dashboard.topMovieThisWeek ? (
             <View style={styles.topMovieRow}>
               <View style={styles.topMovieIcon}>
                 <MaterialIcons name="local-movies" size={18} color="#ffb4ac" />
@@ -201,32 +235,32 @@ export default function AdminDashboard() {
               <View style={styles.topMovieInfo}>
                 <Text style={styles.topMovieLabel}>Film le plus réservé</Text>
                 <Text style={styles.topMovieTitle} numberOfLines={1}>
-                  {data.topMovieThisWeek.title}
+                  {dashboard.topMovieThisWeek.title}
                 </Text>
               </View>
               <Text style={styles.topMovieCount}>
-                {data.topMovieThisWeek.count}{' '}
-                {pluralize(data.topMovieThisWeek.count, 'place', 'places')}
+                {toSafeNumber(dashboard.topMovieThisWeek.count)}{' '}
+                {pluralize(dashboard.topMovieThisWeek.count, 'place', 'places')}
               </Text>
             </View>
           ) : (
-            <Text style={styles.topMovieEmpty}>Aucune réservation cette semaine.</Text>
+            <Text style={styles.topMovieEmpty}>Aucun film cette semaine</Text>
           )}
         </View>
 
         <View style={[styles.card, styles.quickStatsCard]}>
-          <QuickStat icon="movie" label="Films" value={data.quickStats.totalMovies} />
+          <QuickStat icon="movie" label="Films" value={toSafeNumber(quickStats.totalMovies)} />
           <View style={styles.quickStatDivider} />
           <QuickStat
             icon="calendar-today"
             label="Séances"
-            value={data.quickStats.totalScreeningsThisWeek}
+            value={toSafeNumber(quickStats.totalScreeningsThisWeek)}
           />
           <View style={styles.quickStatDivider} />
           <QuickStat
             icon="hourglass-empty"
             label="En attente"
-            value={data.quickStats.pendingReservationsCount}
+            value={toSafeNumber(quickStats.pendingReservationsCount)}
           />
         </View>
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import {
   ActivityIndicator,
   ImageBackground,
@@ -15,15 +15,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { getMovieById, getScreeningsByMovieId } from '../api/movies';
 import ErrorState from '../components/ErrorState';
 import { formatDuration, formatScreeningDate, getNextScreening } from '../utils/date';
 import { useAuth } from '../context/AuthContext';
 import type { Movie, Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { MovieDetailsScreenProps } from '../types/navigation';
+import { useMoviesStore } from '../store/moviesStore';
 
 type DetailsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'MovieDetails'>;
+const EMPTY_SCREENINGS: Screening[] = [];
 
 export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
   const navigation = useNavigation<DetailsNavigationProp>();
@@ -31,30 +32,33 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
   const { user } = useAuth();
   const { movieId, initialDate, screening: suggestedScreening } = route.params;
 
-  const [movie, setMovie] = useState<Movie | null>(null);
-  const [screenings, setScreenings] = useState<Screening[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const movie = useMoviesStore((state) => state.moviesById[movieId] ?? null);
+  const screenings = useMoviesStore((state) => state.screeningsByMovieId[movieId] ?? EMPTY_SCREENINGS);
+  const isLoadingMovieDetails = useMoviesStore(
+    (state) => state.isLoadingMovieDetails[movieId] ?? false
+  );
+  const isLoadingScreenings = useMoviesStore(
+    (state) => state.isLoadingScreenings[movieId] ?? false
+  );
+  const movieDetailsError = useMoviesStore((state) => state.movieDetailsErrors[movieId] ?? null);
+  const screeningsError = useMoviesStore((state) => state.screeningsErrors[movieId] ?? null);
+  const loadMovieDetails = useMoviesStore((state) => state.fetchMovieDetails);
+  const loadScreenings = useMoviesStore((state) => state.fetchScreenings);
+  const loading = isLoadingMovieDetails || isLoadingScreenings;
+  const error = movieDetailsError ?? screeningsError;
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [movieData, screeningsData] = await Promise.all([
-        getMovieById(movieId),
-        getScreeningsByMovieId(movieId),
+  const fetchData = useCallback(
+    async (force = false) => {
+      await Promise.all([
+        loadMovieDetails(movieId, { force }),
+        loadScreenings(movieId, { force }),
       ]);
-      setMovie(movieData);
-      setScreenings(screeningsData);
-    } catch (err: any) {
-      setError(err?.message ?? 'Impossible de charger les détails du film.');
-    } finally {
-      setLoading(false);
-    }
-  }, [movieId]);
+    },
+    [loadMovieDetails, loadScreenings, movieId]
+  );
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [fetchData]);
 
   const nextScreening = useMemo(() => {
@@ -90,7 +94,7 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
             <MaterialIcons name="arrow-back" size={24} color="#e5e2e1" />
           </TouchableOpacity>
         </View>
-        <ErrorState message={error ?? 'Film introuvable.'} onRetry={fetchData} />
+        <ErrorState message={error ?? 'Film introuvable.'} onRetry={() => void fetchData(true)} />
       </SafeAreaView>
     );
   }

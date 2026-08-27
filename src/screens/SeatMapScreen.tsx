@@ -15,10 +15,9 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { getMyReservations } from '../api/reservations';
-import { getSeatsByScreeningId, lockSeats } from '../api/seats';
 import ErrorState from '../components/ErrorState';
-import type { Reservation, Seat, SeatCategory, SeatStatus } from '../types';
+import { useReservationStore } from '../store/reservationStore';
+import type { Seat, SeatCategory, SeatStatus } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { SeatMapScreenProps } from '../types/navigation';
 
@@ -46,14 +45,12 @@ function isSeatTappable(status: SeatStatus): boolean {
   return status === 'LIBRE';
 }
 
-function getRemainingSeconds(reservation: Reservation | undefined): number {
-  if (!reservation?.reservationSeats?.length) return 0;
+function getRemainingSeconds(lockedUntil: string | null): number {
+  if (!lockedUntil) return 0;
   const now = Date.now();
-  const lockedUntils = reservation.reservationSeats
-    .map((rs) => (rs.lockedUntil ? new Date(rs.lockedUntil).getTime() : 0))
-    .filter((t) => t > 0);
-  if (lockedUntils.length === 0) return 0;
-  return Math.max(0, Math.floor((Math.max(...lockedUntils) - now) / 1000));
+  const expiresAt = new Date(lockedUntil).getTime();
+  if (!Number.isFinite(expiresAt)) return 0;
+  return Math.max(0, Math.floor((expiresAt - now) / 1000));
 }
 
 function formatCountdown(totalSeconds: number): string {
@@ -71,71 +68,62 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
   console.log('[DEBUG SeatMap] movie:', movie);
   console.log('[DEBUG SeatMap] screening:', screening);
 
-  const [seats, setSeats] = useState<Seat[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [locking, setLocking] = useState(false);
-  const [pendingReservation, setPendingReservation] = useState<Reservation | null>(null);
   const [pendingRemaining, setPendingRemaining] = useState(0);
 
-  // Look for an existing pending reservation for this screening.
-  const checkPendingReservation = useCallback(async () => {
-    if (!screening?.id) return;
-    try {
-      const reservations = await getMyReservations();
-      const now = Date.now();
-      const pending = reservations.find((r) => {
-        if (r.status !== 'EN_ATTENTE' || r.screening?.id !== screening.id) return false;
-        const lockedUntils = (r.reservationSeats ?? [])
-          .map((rs) => (rs.lockedUntil ? new Date(rs.lockedUntil).getTime() : 0))
-          .filter((t) => t > 0);
-        return lockedUntils.length > 0 && Math.max(...lockedUntils) > now;
-      });
-      if (pending) {
-        setPendingReservation(pending);
-        setPendingRemaining(getRemainingSeconds(pending));
-      } else {
-        setPendingReservation(null);
-        setPendingRemaining(0);
-      }
-    } catch {
-      // Silently ignore — this is a UX helper, not critical.
-    }
-  }, [screening?.id]);
+  const seats = useReservationStore((state) => state.seats);
+  const selectedSeatIds = useReservationStore((state) => state.selectedSeatIds);
+  const isLoadingSeats = useReservationStore((state) => state.isLoadingSeats);
+  const seatError = useReservationStore((state) => state.seatError);
+  const reservationError = useReservationStore((state) => state.reservationError);
+  const pendingReservation = useReservationStore((state) => state.pendingReservation);
+  const lockedUntil = useReservationStore((state) => state.lockedUntil);
+  const isLocking = useReservationStore((state) => state.isLocking);
+  const loadSeats = useReservationStore((state) => state.loadSeats);
+  const loadPendingReservation = useReservationStore((state) => state.loadPendingReservation);
+  const toggleSeatInStore = useReservationStore((state) => state.toggleSeat);
+  const deselectSeats = useReservationStore((state) => state.deselectSeats);
+  const lockSelectedSeats = useReservationStore((state) => state.lockSelectedSeats);
+  const clearReservationDraft = useReservationStore((state) => state.clearReservationDraft);
 
-  useEffect(() => {
-    checkPendingReservation();
-  }, [checkPendingReservation]);
+  const selectedIds = useMemo(() => new Set(selectedSeatIds), [selectedSeatIds]);
 
   useFocusEffect(
     useCallback(() => {
-      checkPendingReservation();
-    }, [checkPendingReservation])
+      if (screening?.id) {
+        void loadPendingReservation(screening.id);
+      }
+    }, [loadPendingReservation, screening?.id])
   );
 
-  // Countdown for the pending reservation banner.
   useEffect(() => {
-    if (!pendingReservation || pendingRemaining <= 0) return;
-    const interval = setInterval(() => {
-      setPendingRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
+    if (!lockedUntil) {
+      setPendingRemaining(0);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const remaining = getRemainingSeconds(lockedUntil);
+      setPendingRemaining(remaining);
+      if (remaining <= 0) {
+        clearReservationDraft();
+        if (screening?.id) {
+          void loadSeats(screening.id, { showLoading: false });
         }
-        return prev - 1;
-      });
-    }, 1000);
+      }
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
     return () => clearInterval(interval);
-  }, [pendingReservation, pendingRemaining]);
+  }, [clearReservationDraft, loadSeats, lockedUntil, screening?.id]);
 
   const handleContinuePayment = () => {
-    if (!pendingReservation?.screening?.movie) return;
+    if (!pendingReservation || !movie || !screening) return;
     const seatsForPayment = pendingReservation.reservationSeats?.map((rs) => rs.seat) ?? [];
     navigation.navigate('Payment', {
-      movie: pendingReservation.screening.movie,
-      screening: pendingReservation.screening,
+      movie,
+      screening,
       reservation: pendingReservation,
       seats: seatsForPayment,
     });
@@ -147,30 +135,21 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
       return;
     }
     console.log('[DEBUG SeatMap] fetchSeats start, screeningId:', screening.id);
-    if (showLoading) setLoading(true);
-    setError(null);
-    try {
-      const data = await getSeatsByScreeningId(screening.id);
-      console.log('[DEBUG SeatMap] fetchSeats success, seats count:', data.length);
-      console.log('[DEBUG SeatMap] first seat sample:', data[0]);
-      setSeats(data);
-    } catch (err: any) {
-      console.log('[DEBUG SeatMap] fetchSeats error:', err?.message, err?.response?.data, err?.response?.status);
-      setError(err?.message ?? 'Impossible de charger les sièges.');
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  }, [screening?.id]);
+    await loadSeats(screening.id, { showLoading });
+    await loadPendingReservation(screening.id);
+  }, [loadPendingReservation, loadSeats, screening?.id]);
 
   useEffect(() => {
-    console.log('[DEBUG SeatMap] component mounted / fetch effect triggered');
     fetchSeats();
   }, [fetchSeats]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchSeats(false);
-    setRefreshing(false);
+    try {
+      await fetchSeats(false);
+    } finally {
+      setRefreshing(false);
+    }
   }, [fetchSeats]);
 
   const hasPendingReservation = Boolean(pendingReservation && pendingRemaining > 0);
@@ -179,16 +158,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     if (hasPendingReservation) return;
     if (!isSeatTappable(seat.status)) return;
 
-    console.log('[DEBUG SeatMap] toggleSeat tapped:', seat);
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(seat.id)) {
-        next.delete(seat.id);
-      } else {
-        next.add(seat.id);
-      }
-      return next;
-    });
+    toggleSeatInStore(seat.id);
   };
 
   const selectedSeats = useMemo(
@@ -208,15 +178,9 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
   }, [selectedSeats]);
 
   const handleConfirm = async () => {
-    if (!screening?.id || selectedIds.size === 0 || hasPendingReservation) return;
-    const payload = {
-      screeningId: screening.id,
-      seatIds: Array.from(selectedIds),
-    };
-    console.log('[DEBUG SeatMap] handleConfirm payload:', payload);
-    setLocking(true);
+    if (!screening?.id || selectedSeatIds.length === 0 || hasPendingReservation) return;
     try {
-      const reservation = await lockSeats(payload);
+      const reservation = await lockSelectedSeats(screening.id);
       console.log('[DEBUG SeatMap] lockSeats success reservation:', reservation);
       navigation.navigate('Payment', {
         movie,
@@ -249,32 +213,21 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
         const unavailable: { id: number }[] = errorData.seats ?? [];
         const unavailableIds = unavailable.map((s) => s.id);
         console.log('[DEBUG SeatMap] 409 unavailable seats:', unavailable);
-        setSeats((prev) =>
-          prev.map((seat) =>
-            unavailableIds.includes(seat.id) ? { ...seat, status: 'OCCUPE' as SeatStatus } : seat
-          )
-        );
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
-          unavailableIds.forEach((id) => next.delete(id));
-          return next;
-        });
+        deselectSeats(unavailableIds);
+        await fetchSeats(false);
         Alert.alert(
           'Sièges indisponibles',
-          'Certains sièges viennent d\'être pris. Ils ont été désélectionnés et marqués comme occupés. Veuillez rafraîchir la liste.',
+          'Certains sièges viennent d\'être pris. Ils ont été désélectionnés et la liste a été rafraîchie.',
           [
             { text: 'OK' },
-            { text: 'Rafraîchir', onPress: () => fetchSeats(false) },
           ]
         );
       } else {
         Alert.alert(
           'Erreur',
-          err.response?.data?.message ?? 'Impossible de verrouiller les sièges.'
+          err.response?.data?.message ?? err?.message ?? reservationError ?? 'Impossible de verrouiller les sièges.'
         );
       }
-    } finally {
-      setLocking(false);
     }
   };
 
@@ -341,7 +294,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     );
   }
 
-  if (loading) {
+  if (isLoadingSeats) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
@@ -352,7 +305,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     );
   }
 
-  if (error) {
+  if (seatError) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
@@ -361,7 +314,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
             <MaterialIcons name="arrow-back" size={24} color="#e5e2e1" />
           </TouchableOpacity>
         </View>
-        <ErrorState message={error} onRetry={() => fetchSeats(false)} />
+        <ErrorState message={seatError} onRetry={() => void fetchSeats()} />
       </SafeAreaView>
     );
   }
@@ -464,12 +417,12 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
           </Text>
         </View>
         <TouchableOpacity
-          style={[styles.confirmButton, (selectedIds.size === 0 || locking || hasPendingReservation) && styles.confirmButtonDisabled]}
+          style={[styles.confirmButton, (selectedSeatIds.length === 0 || isLocking || hasPendingReservation) && styles.confirmButtonDisabled]}
           onPress={handleConfirm}
           activeOpacity={0.9}
-          disabled={selectedIds.size === 0 || locking || hasPendingReservation}
+          disabled={selectedSeatIds.length === 0 || isLocking || hasPendingReservation}
         >
-          {locking ? (
+          {isLocking ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
             <Text style={styles.confirmButtonText}>Confirmer</Text>

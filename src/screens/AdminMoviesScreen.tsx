@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
   FlatList,
   StatusBar,
@@ -13,9 +13,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { getMovies } from '../api/movies';
 import ErrorState from '../components/ErrorState';
 import PosterImage from '../components/PosterImage';
+import { useAdminMoviesStore } from '../store/adminMoviesStore';
 import type { Movie } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 
@@ -24,27 +24,15 @@ type AdminNavigationProp = NativeStackNavigationProp<RootStackParamList, 'AdminM
 export default function AdminMoviesScreen() {
   const navigation = useNavigation<AdminNavigationProp>();
   const insets = useSafeAreaInsets();
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchMovies = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getMovies();
-      setMovies(data);
-    } catch (err: any) {
-      setError(err?.message ?? 'Impossible de charger les films.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const movies = useAdminMoviesStore((state) => state.movies);
+  const loading = useAdminMoviesStore((state) => state.isLoadingMovies);
+  const error = useAdminMoviesStore((state) => state.moviesError);
+  const fetchMovies = useAdminMoviesStore((state) => state.fetchMovies);
 
   useFocusEffect(
     useCallback(() => {
-      fetchMovies();
-    }, []),
+      void fetchMovies();
+    }, [fetchMovies]),
   );
 
   const handleAdd = () => {
@@ -152,7 +140,7 @@ export default function AdminMoviesScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
         {renderHeader()}
-        <ErrorState message={error} onRetry={fetchMovies} />
+        <ErrorState message={error} onRetry={() => void fetchMovies()} />
       </SafeAreaView>
     );
   }

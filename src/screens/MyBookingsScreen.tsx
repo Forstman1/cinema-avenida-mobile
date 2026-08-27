@@ -17,9 +17,10 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { cancelReservation, getMyReservations } from '../api/reservations';
 import ErrorState from '../components/ErrorState';
 import PosterImage from '../components/PosterImage';
+import { useAuthStore } from '../store/authStore';
+import { useBookingsStore } from '../store/bookingsStore';
 import { formatScreeningDate, getScreeningDateTime } from '../utils/date';
 import type { Reservation, Seat } from '../types';
 import type { RootStackParamList } from '../types/navigation';
@@ -87,27 +88,20 @@ function getStatusLabel(reservation: Reservation, isHistory: boolean): string {
 export default function MyBookingsScreen() {
   const navigation = useNavigation<BookingsNavigationProp>();
   const insets = useSafeAreaInsets();
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+  const reservations = useBookingsStore((state) => state.reservations);
+  const loading = useBookingsStore((state) => state.isLoadingReservations);
+  const refreshing = useBookingsStore((state) => state.isRefreshingReservations);
+  const error = useBookingsStore((state) => state.reservationsError);
+  const cancellingReservationId = useBookingsStore((state) => state.cancellingReservationId);
+  const fetchMyReservations = useBookingsStore((state) => state.fetchMyReservations);
+  const refreshMyReservations = useBookingsStore((state) => state.refreshMyReservations);
+  const cancelReservation = useBookingsStore((state) => state.cancelReservation);
+  const selectBooking = useBookingsStore((state) => state.selectBooking);
   const [activeTab, setActiveTab] = useState<TabType>('upcoming');
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
 
   const pendingReservation = useMemo(() => getPendingReservation(reservations), [reservations]);
-
-  const fetchReservations = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
-    setError(null);
-    try {
-      const data = await getMyReservations();
-      setReservations(data);
-    } catch (err: any) {
-      setError(err?.message ?? 'Impossible de charger vos réservations.');
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     setRemainingSeconds(getRemainingSeconds(pendingReservation));
@@ -119,26 +113,24 @@ export default function MyBookingsScreen() {
       setRemainingSeconds((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          fetchReservations(false);
+          void refreshMyReservations();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [pendingReservation, remainingSeconds, fetchReservations]);
+  }, [pendingReservation, remainingSeconds, refreshMyReservations]);
 
   useFocusEffect(
     useCallback(() => {
-      fetchReservations();
-    }, [fetchReservations])
+      void fetchMyReservations();
+    }, [fetchMyReservations, userId])
   );
 
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchReservations(false);
-    setRefreshing(false);
-  }, [fetchReservations]);
+    await refreshMyReservations();
+  }, [refreshMyReservations]);
 
   const upcoming = useMemo(
     () => reservations
@@ -152,7 +144,11 @@ export default function MyBookingsScreen() {
   );
   const history = useMemo(
     () => reservations
-      .filter((reservation) => !isUpcoming(reservation) && reservation.id !== pendingReservation?.id)
+      .filter(
+        (reservation) =>
+          reservation.status !== 'EN_ATTENTE' &&
+          !isUpcoming(reservation)
+      )
       .sort((a, b) => {
         const dateA = getScreeningDateTime(a)?.getTime() ?? 0;
         const dateB = getScreeningDateTime(b)?.getTime() ?? 0;
@@ -174,7 +170,6 @@ export default function MyBookingsScreen() {
             try {
               await cancelReservation(reservation.id);
               Alert.alert('Annulée', 'Votre réservation a été annulée.');
-              fetchReservations(false);
             } catch (err: any) {
               Alert.alert('Erreur', err?.response?.data?.message ?? 'Impossible d\'annuler.');
             }
@@ -189,6 +184,15 @@ export default function MyBookingsScreen() {
     const ticket = reservation.ticket;
     const seats = reservation.reservationSeats?.map((rs) => rs.seat) ?? [];
     if (!screening?.movie || !ticket || seats.length === 0) return;
+
+    selectBooking({
+      userId,
+      reservation,
+      ticket,
+      movie: screening.movie,
+      screening,
+      seats,
+    });
 
     navigation.navigate('Ticket', {
       movie: screening.movie,
@@ -219,7 +223,11 @@ export default function MyBookingsScreen() {
     const dateLabel = screening ? formatScreeningDate(screening.date) : '-';
     const isCancelled = reservation.status === 'CANCELLED';
     const isHistory = dimmed || isCancelled;
-    const canViewTicket = Boolean(movie && screening && reservation.ticket && seats.length > 0);
+    const canViewTicket = Boolean(
+      !isCancelled && movie && screening && reservation.ticket && seats.length > 0
+    );
+    const isCancelling = cancellingReservationId === reservation.id;
+    const cancellationInProgress = cancellingReservationId !== null;
 
     return (
       <View key={reservation.id} style={[styles.card, isHistory && styles.cardDimmed]}>
@@ -287,10 +295,15 @@ export default function MyBookingsScreen() {
                 style={styles.cancelButton}
                 onPress={() => handleCancel(reservation)}
                 activeOpacity={0.8}
+                disabled={cancellationInProgress}
                 accessibilityRole="button"
                 accessibilityLabel={`Annuler la réservation pour ${movie?.title ?? 'ce film'}`}
               >
-                <Text style={styles.cancelButtonText}>Annuler</Text>
+                {isCancelling ? (
+                  <ActivityIndicator size="small" color="#ffb4ac" />
+                ) : (
+                  <Text style={styles.cancelButtonText}>Annuler</Text>
+                )}
               </TouchableOpacity>
             )}
           </View>
@@ -345,7 +358,7 @@ export default function MyBookingsScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <ErrorState message={error} onRetry={() => fetchReservations(false)} />
+        <ErrorState message={error} onRetry={() => void fetchMyReservations()} />
       </SafeAreaView>
     );
   }

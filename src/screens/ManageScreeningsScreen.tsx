@@ -14,20 +14,17 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 
-import { createScreening, getScreeningsByMovieId } from '../api/movies';
 import ErrorState from '../components/ErrorState';
+import { useAdminScreeningsStore } from '../store/adminScreeningsStore';
+import { compareShowTimes, parseLocalDate, toISODate, toISODateString } from '../utils/date';
 import type { Movie, Screening } from '../types';
 import type { ManageScreeningsScreenProps } from '../types/navigation';
 
 const TIME_SLOTS = ['18:00', '20:30', '22:30'];
 
-function toISODateString(date: Date): string {
-  return date.toISOString().split('T')[0];
-}
-
 function groupScreeningsByDate(screenings: Screening[]): Record<string, Screening[]> {
   return screenings.reduce((acc, screening) => {
-    const date = new Date(screening.date).toISOString().split('T')[0];
+    const date = toISODate(screening.date);
     if (!acc[date]) acc[date] = [];
     acc[date].push(screening);
     return acc;
@@ -41,26 +38,41 @@ export default function ManageScreeningsScreen({
   const insets = useSafeAreaInsets();
   const { movie } = route.params;
 
-  const [screenings, setScreenings] = useState<Screening[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const screeningIds = useAdminScreeningsStore(
+    (state) => state.screeningIdsByMovieId[movie.id] ?? []
+  );
+  const screeningsById = useAdminScreeningsStore((state) => state.screeningsById);
+  const loading = useAdminScreeningsStore(
+    (state) => state.isLoadingByMovieId[movie.id] ?? false
+  );
+  const error = useAdminScreeningsStore(
+    (state) => state.movieErrors[movie.id] ?? null
+  );
+  const fetchScreeningsByMovieId = useAdminScreeningsStore(
+    (state) => state.fetchScreeningsByMovieId
+  );
+  const createAdminScreening = useAdminScreeningsStore((state) => state.createScreening);
+  const isCreatingScreening = useAdminScreeningsStore((state) => state.isCreatingScreening);
+  const createScreeningError = useAdminScreeningsStore((state) => state.createScreeningError);
 
   const [date, setDate] = useState(toISODateString(new Date()));
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const screenings = useMemo(
+    () => screeningIds
+      .map((id) => screeningsById[id])
+      .filter((screening): screening is Screening => Boolean(screening))
+      .sort((a, b) => {
+        const dateComparison = toISODate(a.date).localeCompare(toISODate(b.date));
+        return dateComparison !== 0
+          ? dateComparison
+          : compareShowTimes(a.showTime, b.showTime);
+      }),
+    [screeningIds, screeningsById]
+  );
 
   const fetchScreenings = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getScreeningsByMovieId(movie.id);
-      setScreenings(data);
-    } catch (err: any) {
-      setError(err?.message ?? 'Impossible de charger les séances.');
-    } finally {
-      setLoading(false);
-    }
-  }, [movie.id]);
+    await fetchScreeningsByMovieId(movie.id);
+  }, [fetchScreeningsByMovieId, movie.id]);
 
   useEffect(() => {
     fetchScreenings();
@@ -72,31 +84,39 @@ export default function ManageScreeningsScreen({
     [grouped]
   );
 
-  const canSubmit = date.trim() && selectedSlot;
+  const isValidDate = Boolean(parseLocalDate(date.trim()));
+  const isValidTime = Boolean(selectedSlot && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(selectedSlot));
+  const canSubmit = Number.isInteger(movie.id) && movie.id > 0 && isValidDate && isValidTime;
 
   const handleAdd = async () => {
-    if (!canSubmit) {
-      Alert.alert('Champs invalides', 'Veuillez choisir une date et un créneau.');
+    if (!Number.isInteger(movie.id) || movie.id <= 0) {
+      Alert.alert('Champs invalides', 'L’identifiant du film est invalide.');
+      return;
+    }
+    if (!isValidDate) {
+      Alert.alert('Champs invalides', 'Veuillez saisir une date valide au format AAAA-MM-JJ.');
+      return;
+    }
+    if (!isValidTime || !selectedSlot) {
+      Alert.alert('Champs invalides', 'Veuillez choisir un créneau au format HH:mm.');
       return;
     }
 
-    setSaving(true);
     try {
-      await createScreening({
+      const createdScreening = await createAdminScreening({
         movieId: movie.id,
-        date,
+        date: date.trim(),
         showTime: selectedSlot,
       });
+      if (!createdScreening) return;
       setSelectedSlot(null);
       setDate(toISODateString(new Date()));
       await fetchScreenings();
     } catch (err: any) {
       Alert.alert(
         'Erreur',
-        err?.response?.data?.message ?? 'Impossible de créer la séance.'
+        err?.response?.data?.message ?? createScreeningError ?? 'Impossible de créer la séance.'
       );
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -122,7 +142,7 @@ export default function ManageScreeningsScreen({
           <Text style={styles.topBarTitle} numberOfLines={1}>Séances</Text>
           <View style={styles.topBarSpacer} />
         </View>
-        <ErrorState message={error} onRetry={fetchScreenings} />
+        <ErrorState message={error} onRetry={() => void fetchScreenings()} />
       </SafeAreaView>
     );
   }
@@ -182,12 +202,12 @@ export default function ManageScreeningsScreen({
         </View>
 
         <TouchableOpacity
-          style={[styles.addButton, (!canSubmit || saving) && styles.addButtonDisabled]}
+          style={[styles.addButton, (!canSubmit || isCreatingScreening) && styles.addButtonDisabled]}
           onPress={handleAdd}
           activeOpacity={0.9}
-          disabled={!canSubmit || saving}
+          disabled={!canSubmit || isCreatingScreening}
         >
-          {saving ? (
+          {isCreatingScreening ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
             <>

@@ -15,7 +15,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { getScreeningsByMovieId } from '../api/movies';
 import ErrorState from '../components/ErrorState';
 import type { Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
@@ -29,6 +28,7 @@ import {
   toISODate,
   toISODateString,
 } from '../utils/date';
+import { useMoviesStore } from '../store/moviesStore';
 
 type ScreeningsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Screenings'>;
 
@@ -37,6 +37,7 @@ const MONTH_NAMES = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
 ];
+const EMPTY_SCREENINGS: Screening[] = [];
 
 function formatSelectedDate(date: Date): string {
   const weekday = date.toLocaleDateString('fr-FR', { weekday: 'long' });
@@ -59,11 +60,17 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
     [weekDays]
   );
 
-  const [screenings, setScreenings] = useState<Screening[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const screenings = useMoviesStore(
+    (state) => state.screeningsByMovieId[movie.id] ?? EMPTY_SCREENINGS
+  );
+  const isLoadingScreenings = useMoviesStore(
+    (state) => state.isLoadingScreenings[movie.id] ?? false
+  );
+  const error = useMoviesStore((state) => state.screeningsErrors[movie.id] ?? null);
+  const loadScreenings = useMoviesStore((state) => state.fetchScreenings);
+  const loading = isLoadingScreenings;
 
   const groupedScreenings = useMemo(() => {
     const map: Record<string, Screening[]> = {};
@@ -104,21 +111,13 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
     }
   }, [currentDayScreenings, selectedId]);
 
-  const fetchScreenings = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getScreeningsByMovieId(movie.id);
-      setScreenings(data);
-    } catch (err: any) {
-      setError(err?.message ?? 'Impossible de charger les séances.');
-    } finally {
-      setLoading(false);
-    }
-  }, [movie.id]);
+  const fetchScreenings = useCallback(
+    (force = false) => loadScreenings(movie.id, { force }),
+    [loadScreenings, movie.id]
+  );
 
   useEffect(() => {
-    fetchScreenings();
+    void fetchScreenings();
   }, [fetchScreenings]);
 
   useEffect(() => {
@@ -130,7 +129,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
         ? initialDate
         : today
     );
-  }, [groupedScreenings, initialDate, loading, selectedDate, today, weekDateStrings]);
+  }, [groupedScreenings, initialDate, isLoadingScreenings, selectedDate, today, weekDateStrings]);
 
   const handleDayPress = useCallback((dateString: string) => {
     setSelectedDate(dateString);
@@ -198,7 +197,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
             <MaterialIcons name="arrow-back" size={24} color="#e5e2e1" />
           </TouchableOpacity>
         </View>
-        <ErrorState message={error} onRetry={fetchScreenings} />
+        <ErrorState message={error} onRetry={() => void fetchScreenings(true)} />
       </SafeAreaView>
     );
   }

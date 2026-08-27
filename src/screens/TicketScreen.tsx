@@ -13,6 +13,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import NativeQRCode from '../components/NativeQRCode';
+import { useAuthStore } from '../store/authStore';
+import { useBookingsStore } from '../store/bookingsStore';
 import { formatScreeningDate } from '../utils/date';
 import type { RootStackParamList } from '../types/navigation';
 import type { TicketScreenProps } from '../types/navigation';
@@ -27,10 +29,39 @@ function formatZoneLabel(seats: { category: string }[]): string {
   return 'Mixte';
 }
 
+function formatReservationStatus(status: string): string {
+  if (status === 'CANCELLED') return 'ANNULÉE';
+  if (status === 'EN_ATTENTE') return 'EN ATTENTE';
+  if (status === 'CONFIRMED') return 'CONFIRMÉE';
+  return status;
+}
+
+function formatTicketStatus(status: string | undefined, isCancelled: boolean): string {
+  if (isCancelled || status === 'CANCELLED') return 'ANNULÉ';
+  if (!status) return 'VALIDE';
+  if (status === 'USED') return 'UTILISÉ';
+  if (status === 'ACTIVE' || status === 'VALID') return 'VALIDE';
+  return status;
+}
+
 export default function TicketScreen({ route }: TicketScreenProps) {
   const navigation = useNavigation<TicketNavigationProp>();
   const insets = useSafeAreaInsets();
-  const { movie, screening, reservation, ticket, seats } = route.params;
+  const currentUserId = useAuthStore((state) => state.user?.id ?? null);
+  const storedBooking = useBookingsStore(
+    (state) => state.selectedBooking ?? state.lastCompletedBooking
+  );
+  const routeParams = route.params;
+  const storedBookingBelongsToUser = storedBooking?.userId === currentUserId;
+  const storedBookingMatchesRoute = storedBooking?.reservation.id === routeParams.reservation.id;
+  const completedBooking =
+    storedBooking && storedBookingBelongsToUser && storedBookingMatchesRoute ? storedBooking : null;
+  const canUseRouteFallback = !storedBooking || storedBookingBelongsToUser;
+  const movie = completedBooking?.movie ?? (canUseRouteFallback ? routeParams.movie : null);
+  const screening = completedBooking?.screening ?? (canUseRouteFallback ? routeParams.screening : null);
+  const reservation = completedBooking?.reservation ?? (canUseRouteFallback ? routeParams.reservation : null);
+  const ticket = completedBooking?.ticket ?? (canUseRouteFallback ? routeParams.ticket : null);
+  const seats = completedBooking?.seats ?? (canUseRouteFallback ? routeParams.seats : []);
 
   const seatLabels = useMemo(() => seats.map((s) => `${s.row}${s.number}`), [seats]);
   const zoneLabel = useMemo(() => formatZoneLabel(seats), [seats]);
@@ -38,6 +69,22 @@ export default function TicketScreen({ route }: TicketScreenProps) {
   const handleViewBookings = () => {
     navigation.navigate('Main', { screen: 'Mes Billets' } as never);
   };
+
+  if (!movie || !screening || !reservation || !ticket) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <View style={styles.missingState}>
+          <Text style={styles.missingStateText}>Billet indisponible.</Text>
+          <TouchableOpacity style={styles.missingStateButton} onPress={handleViewBookings} activeOpacity={0.9}>
+            <Text style={styles.buttonText}>Voir mes billets</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const isCancelled = reservation.status === 'CANCELLED' || ticket.status === 'CANCELLED';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -86,6 +133,22 @@ export default function TicketScreen({ route }: TicketScreenProps) {
             </View>
           </View>
 
+          {/* Reservation / ticket status */}
+          <View style={styles.infoRow}>
+            <View style={styles.infoBlock}>
+              <Text style={styles.infoLabel}>RÉSERVATION</Text>
+              <Text style={[styles.infoValue, isCancelled && styles.infoValueCancelled]}>
+                {formatReservationStatus(reservation.status)}
+              </Text>
+            </View>
+            <View style={[styles.infoBlock, styles.infoBlockRight]}>
+              <Text style={styles.infoLabel}>BILLET</Text>
+              <Text style={[styles.infoValue, isCancelled && styles.infoValueCancelled]}>
+                {formatTicketStatus(ticket.status, isCancelled)}
+              </Text>
+            </View>
+          </View>
+
           {/* Perforation line */}
           <View style={styles.perforation}>
             <View style={styles.dashedLine} />
@@ -101,13 +164,22 @@ export default function TicketScreen({ route }: TicketScreenProps) {
             ))}
           </View>
 
-          {/* QR code */}
-          <View style={styles.qrWrapper}>
-            <NativeQRCode value={ticket.qrCode} size={180} />
-          </View>
+          {/* Backend-generated QR code */}
+          {isCancelled ? (
+            <View style={styles.cancelledTicket}>
+              <MaterialIcons name="block" size={44} color="#b22222" />
+              <Text style={styles.cancelledTicketText}>Billet annulé</Text>
+            </View>
+          ) : (
+            <View style={styles.qrWrapper}>
+              <NativeQRCode value={ticket.qrCode} size={180} />
+            </View>
+          )}
         </View>
 
-        <Text style={styles.hint}>Présentez ce code à l'entrée</Text>
+        <Text style={isCancelled ? styles.cancelledHint : styles.hint}>
+          {isCancelled ? 'Cette réservation a été annulée.' : 'Présentez ce code à l’entrée'}
+        </Text>
       </ScrollView>
 
       {/* Bottom button */}
@@ -201,6 +273,9 @@ const styles = StyleSheet.create({
   infoValueAccent: {
     color: '#b22222',
   },
+  infoValueCancelled: {
+    color: '#b22222',
+  },
   perforation: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -250,10 +325,52 @@ const styles = StyleSheet.create({
     minWidth: 212,
     minHeight: 212,
   },
+  cancelledTicket: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    width: 212,
+    height: 212,
+    borderRadius: 16,
+    backgroundColor: '#ebe5e3',
+    borderWidth: 1,
+    borderColor: '#d5c6c3',
+    gap: 12,
+  },
+  cancelledTicketText: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 16,
+    color: '#b22222',
+  },
   hint: {
     fontFamily: 'Inter-Regular',
     fontSize: 14,
     color: '#aa8986',
+    textAlign: 'center',
+    marginTop: 24,
+  },
+  missingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 18,
+  },
+  missingStateText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: '#e5e2e1',
+  },
+  missingStateButton: {
+    backgroundColor: '#b22222',
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+  },
+  cancelledHint: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: '#b22222',
     textAlign: 'center',
     marginTop: 24,
   },

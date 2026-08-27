@@ -16,11 +16,13 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 
-import { createScreening, getMovies, getScreeningsByDate } from '../api/movies';
 import ErrorState from '../components/ErrorState';
 import PosterImage from '../components/PosterImage';
+import { useAdminMoviesStore } from '../store/adminMoviesStore';
+import { useAdminScreeningsStore } from '../store/adminScreeningsStore';
 import type { Movie, Screening } from '../types';
 import type { ProgrammeScreenProps } from '../types/navigation';
+import { compareShowTimes, toISODate } from '../utils/date';
 
 const TIME_SLOTS = ['18:00', '20:30', '22:30'];
 const WEEKDAY_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
@@ -77,68 +79,46 @@ export default function ProgrammeScreen() {
     [selectedDate]
   );
 
-  const [schedule, setSchedule] = useState<Screening[]>([]);
-  const [loadingSchedule, setLoadingSchedule] = useState(true);
-  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const screeningIds = useAdminScreeningsStore(
+    (state) => state.screeningIdsByDate[selectedDateString] ?? []
+  );
+  const screeningsById = useAdminScreeningsStore((state) => state.screeningsById);
+  const loadingSchedule = useAdminScreeningsStore(
+    (state) => state.isLoadingByDate[selectedDateString] ?? false
+  );
+  const scheduleError = useAdminScreeningsStore(
+    (state) => state.dateErrors[selectedDateString] ?? null
+  );
+  const fetchScreeningsByDate = useAdminScreeningsStore((state) => state.fetchScreeningsByDate);
+  const createAdminScreening = useAdminScreeningsStore((state) => state.createScreening);
+  const isCreatingScreening = useAdminScreeningsStore((state) => state.isCreatingScreening);
+  const createScreeningError = useAdminScreeningsStore((state) => state.createScreeningError);
+  const clearCreateError = useAdminScreeningsStore((state) => state.clearCreateError);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [moviesMap, setMoviesMap] = useState<Record<number, Movie>>({});
+  const movies = useAdminMoviesStore((state) => state.movies);
+  const loadingMovies = useAdminMoviesStore((state) => state.isLoadingMovies);
+  const fetchMovies = useAdminMoviesStore((state) => state.fetchMovies);
   const [modalVisible, setModalVisible] = useState(false);
   const [pendingSlot, setPendingSlot] = useState<string | null>(null);
-  const [loadingMovies, setLoadingMovies] = useState(false);
-  const [assigning, setAssigning] = useState(false);
-
-  const fetchMovies = useCallback(async () => {
-    setLoadingMovies(true);
-    try {
-      const data = await getMovies();
-      setMovies(data);
-      const map: Record<number, Movie> = {};
-      data.forEach((movie) => {
-        map[movie.id] = movie;
-      });
-      setMoviesMap(map);
-    } catch (err: any) {
-      Alert.alert('Erreur', err?.message ?? 'Impossible de charger les films.');
-    } finally {
-      setLoadingMovies(false);
-    }
-  }, []);
+  const schedule = useMemo(
+    () => screeningIds
+      .map((id) => screeningsById[id])
+      .filter((screening): screening is Screening => Boolean(screening))
+      .filter((screening) => toISODate(screening.date) === selectedDateString)
+      .sort((a, b) => compareShowTimes(a.showTime, b.showTime)),
+    [screeningIds, screeningsById, selectedDateString]
+  );
 
   const fetchSchedule = useCallback(async () => {
-    setLoadingSchedule(true);
-    setScheduleError(null);
-    try {
-      const data = await getScreeningsByDate(selectedDateString);
-      setSchedule(data);
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const isNetworkError =
-        !err?.response ||
-        err?.code === 'ECONNABORTED' ||
-        err?.code === 'ERR_NETWORK' ||
-        err?.code === 'ENOTFOUND' ||
-        err?.code === 'ECONNREFUSED';
-      const isServerError = status >= 500 || err?.code === 'ERR_BAD_RESPONSE';
-
-      if (isNetworkError || isServerError) {
-        setScheduleError(err?.message ?? 'Impossible de charger le programme.');
-      } else {
-        // Empty schedule or 4xx responses (e.g. 404 for this date) are not errors:
-        // keep the three time-slot cards visible with "Ajouter".
-        setSchedule([]);
-      }
-    } finally {
-      setLoadingSchedule(false);
-    }
-  }, [selectedDateString]);
+    await fetchScreeningsByDate(selectedDateString);
+  }, [fetchScreeningsByDate, selectedDateString]);
 
   useFocusEffect(
     useCallback(() => {
-      fetchSchedule();
-      fetchMovies();
-    }, [fetchSchedule, fetchMovies]),
+      void fetchSchedule();
+      void fetchMovies();
+    }, [fetchMovies, fetchSchedule]),
   );
 
   const onRefresh = useCallback(async () => {
@@ -150,10 +130,12 @@ export default function ProgrammeScreen() {
   const slots = useMemo(() => {
     return TIME_SLOTS.map((time) => {
       const screening = schedule.find((s) => s.showTime === time);
-      const movie = screening ? moviesMap[screening.movieId] : undefined;
+      const movie = screening
+        ? movies.find((candidate) => candidate.id === screening.movieId)
+        : undefined;
       return { time, screening, movie };
     });
-  }, [schedule, moviesMap]);
+  }, [movies, schedule]);
 
   const openMoviePicker = async (slot: string) => {
     setPendingSlot(slot);
@@ -166,17 +148,18 @@ export default function ProgrammeScreen() {
   const closeModal = () => {
     setModalVisible(false);
     setPendingSlot(null);
+    clearCreateError();
   };
 
   const handleSelectMovie = async (movie: Movie) => {
     if (!pendingSlot) return;
-    setAssigning(true);
     try {
-      await createScreening({
+      const createdScreening = await createAdminScreening({
         movieId: movie.id,
         date: selectedDateString,
         showTime: pendingSlot,
       });
+      if (!createdScreening) return;
       closeModal();
       await fetchSchedule();
     } catch (err: any) {
@@ -190,11 +173,9 @@ export default function ProgrammeScreen() {
       } else {
         Alert.alert(
           'Erreur',
-          err?.response?.data?.message ?? 'Impossible de créer la séance.'
+          err?.response?.data?.message ?? createScreeningError ?? 'Impossible de créer la séance.'
         );
       }
-    } finally {
-      setAssigning(false);
     }
   };
 
@@ -209,7 +190,7 @@ export default function ProgrammeScreen() {
       style={styles.movieRow}
       onPress={() => handleSelectMovie(item)}
       activeOpacity={0.8}
-      disabled={assigning}
+      disabled={isCreatingScreening}
     >
       <PosterImage
         uri={item.poster}
@@ -302,46 +283,51 @@ export default function ProgrammeScreen() {
         {scheduleError ? (
           <ErrorState message={scheduleError} onRetry={fetchSchedule} />
         ) : (
-          <View style={styles.cards}>
-            {slots.map(({ time, screening, movie }) => {
-              const assigned = !!screening && !!movie;
-              return (
-                <View
-                  key={time}
-                  style={[
-                    styles.card,
-                    assigned ? styles.cardAssigned : styles.cardEmpty,
-                  ]}
-                >
-                  <View style={styles.timeBadge}>
-                    <MaterialIcons name="access-time" size={12} color="#e2beba" />
-                    <Text style={styles.timeText}>{time}</Text>
-                  </View>
-
-                  {assigned ? (
-                    <View style={styles.assignedContent}>
-                      <Text style={styles.assignedTitle} numberOfLines={2}>
-                        {movie!.title}
-                      </Text>
-                      <View style={styles.assignedMetaRow}>
-                        <MaterialIcons name="schedule" size={12} color="#aa8986" />
-                        <Text style={styles.assignedMeta}>{movie!.duration}</Text>
-                      </View>
+          <>
+            {!loadingSchedule && schedule.length === 0 ? (
+              <Text style={styles.emptyScheduleText}>Aucune séance programmée ce jour</Text>
+            ) : null}
+            <View style={styles.cards}>
+              {slots.map(({ time, screening, movie }) => {
+                const assigned = !!screening && !!movie;
+                return (
+                  <View
+                    key={time}
+                    style={[
+                      styles.card,
+                      assigned ? styles.cardAssigned : styles.cardEmpty,
+                    ]}
+                  >
+                    <View style={styles.timeBadge}>
+                      <MaterialIcons name="access-time" size={12} color="#e2beba" />
+                      <Text style={styles.timeText}>{time}</Text>
                     </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.addButton}
-                      onPress={() => openMoviePicker(time)}
-                      activeOpacity={0.8}
-                    >
-                      <MaterialIcons name="add" size={18} color="#ffb4ac" />
-                      <Text style={styles.addButtonText}>Ajouter</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              );
-            })}
-          </View>
+
+                    {assigned ? (
+                      <View style={styles.assignedContent}>
+                        <Text style={styles.assignedTitle} numberOfLines={2}>
+                          {movie!.title}
+                        </Text>
+                        <View style={styles.assignedMetaRow}>
+                          <MaterialIcons name="schedule" size={12} color="#aa8986" />
+                          <Text style={styles.assignedMeta}>{movie!.duration}</Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.addButton}
+                        onPress={() => openMoviePicker(time)}
+                        activeOpacity={0.8}
+                      >
+                        <MaterialIcons name="add" size={18} color="#ffb4ac" />
+                        <Text style={styles.addButtonText}>Ajouter</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </>
         )}
 
         {loadingSchedule && (
@@ -374,7 +360,7 @@ export default function ProgrammeScreen() {
                 style={styles.closeButton}
                 onPress={closeModal}
                 activeOpacity={0.8}
-                disabled={assigning}
+                disabled={isCreatingScreening}
               >
                 <MaterialIcons name="close" size={24} color="#e5e2e1" />
               </TouchableOpacity>
@@ -506,6 +492,12 @@ const styles = StyleSheet.create({
     color: '#e5e2e1',
     marginTop: 20,
     marginBottom: 16,
+  },
+  emptyScheduleText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: '#aa8986',
+    marginBottom: 12,
   },
   cards: {
     gap: 12,

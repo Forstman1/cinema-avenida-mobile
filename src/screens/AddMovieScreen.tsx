@@ -15,7 +15,8 @@ import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { createMovie, getRawMovieById, updateMovie } from '../api/movies';
+import { getRawMovieById } from '../api/movies';
+import { useAdminMoviesStore } from '../store/adminMoviesStore';
 import type { RootStackParamList } from '../types/navigation';
 import type { AddMovieScreenProps } from '../types/navigation';
 
@@ -26,13 +27,21 @@ export default function AddMovieScreen({ route }: AddMovieScreenProps) {
   const insets = useSafeAreaInsets();
   const editMovie = route.params?.movie;
   const isEdit = Boolean(editMovie);
+  const isSubmitting = useAdminMoviesStore((state) => state.isSubmitting);
+  const submissionError = useAdminMoviesStore((state) => state.submissionError);
+  const createAdminMovie = useAdminMoviesStore((state) => state.createMovie);
+  const updateAdminMovie = useAdminMoviesStore((state) => state.updateMovie);
+  const clearErrors = useAdminMoviesStore((state) => state.clearErrors);
 
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState('');
   const [genre, setGenre] = useState('');
   const [synopsis, setSynopsis] = useState('');
   const [poster, setPoster] = useState('');
-  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    clearErrors();
+  }, [clearErrors]);
 
   // In edit mode, fetch the raw movie to avoid the internet poster placeholder.
   useEffect(() => {
@@ -76,19 +85,21 @@ export default function AddMovieScreen({ route }: AddMovieScreenProps) {
       poster: poster.trim() || undefined,
     };
 
-    setLoading(true);
     try {
       if (isEdit && editMovie) {
-        await updateMovie(editMovie.id, payload);
+        const savedMovie = await updateAdminMovie(editMovie.id, payload);
+        if (!savedMovie) return;
         Alert.alert('Film mis à jour', '', [{ text: 'OK', onPress: () => navigation.goBack() }]);
       } else {
-        await createMovie(payload);
+        const savedMovie = await createAdminMovie(payload);
+        if (!savedMovie) return;
         Alert.alert('Film créé', '', [{ text: 'OK', onPress: () => navigation.goBack() }]);
       }
     } catch (err: any) {
-      Alert.alert('Erreur', err?.response?.data?.message ?? 'Impossible d\'enregistrer le film.');
-    } finally {
-      setLoading(false);
+      Alert.alert(
+        'Erreur',
+        err?.response?.data?.message ?? submissionError ?? 'Impossible d\'enregistrer le film.'
+      );
     }
   };
 
@@ -173,13 +184,15 @@ export default function AddMovieScreen({ route }: AddMovieScreenProps) {
           />
         </View>
 
+        {submissionError ? <Text style={styles.serverError}>{submissionError}</Text> : null}
+
         <TouchableOpacity
-          style={[styles.saveButton, (!isFormValid || loading) && styles.saveButtonDisabled]}
+          style={[styles.saveButton, (!isFormValid || isSubmitting) && styles.saveButtonDisabled]}
           onPress={handleSave}
           activeOpacity={0.9}
-          disabled={!isFormValid || loading}
+          disabled={!isFormValid || isSubmitting}
         >
-          {loading ? (
+          {isSubmitting ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
             <Text style={styles.saveButtonText}>Enregistrer le film</Text>
@@ -264,6 +277,13 @@ const styles = StyleSheet.create({
     minHeight: 120,
     paddingTop: 14,
     lineHeight: 22,
+  },
+  serverError: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#ffb4ac',
+    marginTop: 4,
   },
   saveButton: {
     backgroundColor: '#b22222',

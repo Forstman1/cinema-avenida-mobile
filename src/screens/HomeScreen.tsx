@@ -14,7 +14,6 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { getMovies } from '../api/movies';
 import FeaturedMovieCard from '../components/FeaturedMovieCard';
 import VerticalMovieCard from '../components/VerticalMovieCard';
 import HomeSkeleton from '../components/HomeSkeleton';
@@ -35,6 +34,7 @@ import {
 } from '../utils/programme';
 import type { Movie, Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
+import { useMoviesStore } from '../store/moviesStore';
 
 type HomeNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
 
@@ -65,10 +65,12 @@ export default function HomeScreen() {
 function CustomerHomeScreen() {
   const navigation = useNavigation<HomeNavigationProp>();
   const insets = useSafeAreaInsets();
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const movies = useMoviesStore((state) => state.movies);
+  const isLoadingMovies = useMoviesStore((state) => state.isLoadingMovies);
+  const moviesError = useMoviesStore((state) => state.moviesError);
+  const loadMovies = useMoviesStore((state) => state.fetchMovies);
+  const refreshMovies = useMoviesStore((state) => state.refreshMovies);
 
   const today = useMemo(() => getTodayDateString(), []);
   const weekDays = useMemo(() => getRemainingDaysOfWeek(), []);
@@ -78,22 +80,14 @@ function CustomerHomeScreen() {
   );
   const [selectedDate, setSelectedDate] = useState(today);
 
-  const fetchMovies = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
-    setError(null);
-    try {
-      const data = await getMovies({ current: true });
-      setMovies(data);
-    } catch (err: any) {
-      setError(err?.message ?? 'Impossible de charger le programme.');
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  }, []);
+  const fetchMovies = useCallback(
+    (showLoading = true) => loadMovies({ force: true, showLoading }),
+    [loadMovies]
+  );
 
   useFocusEffect(
     useCallback(() => {
-      fetchMovies();
+      void fetchMovies();
     }, [fetchMovies])
   );
 
@@ -150,9 +144,12 @@ function CustomerHomeScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchMovies(false);
-    setRefreshing(false);
-  }, [fetchMovies]);
+    try {
+      await refreshMovies({ showLoading: false });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshMovies]);
 
   const handleMoviePress = (movie: Movie, screening?: Screening) => {
     navigation.navigate('MovieDetails', {
@@ -223,7 +220,7 @@ function CustomerHomeScreen() {
     </>
   );
 
-  if (loading) {
+  if (isLoadingMovies) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
@@ -232,11 +229,11 @@ function CustomerHomeScreen() {
     );
   }
 
-  if (error) {
+  if (moviesError) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <ErrorState message={error} onRetry={fetchMovies} />
+        <ErrorState message={moviesError} onRetry={() => void fetchMovies()} />
       </SafeAreaView>
     );
   }

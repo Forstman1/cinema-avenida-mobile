@@ -11,14 +11,20 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 
-import { useAuth } from '../context/AuthContext';
+import { useAuthStore } from '../store/authStore';
+import { useBookingsStore } from '../store/bookingsStore';
+import { useReservationStore } from '../store/reservationStore';
 
 function getInitial(name: string): string {
   return name?.trim()?.charAt(0)?.toUpperCase() ?? '?';
 }
 
 export default function ProfileScreen() {
-  const { user, logout } = useAuth();
+  const userName = useAuthStore((state) => state.user?.name ?? 'Invité');
+  const userEmail = useAuthStore((state) => state.user?.email ?? '');
+  const logout = useAuthStore((state) => state.logout);
+  const clearBookings = useBookingsStore((state) => state.clearBookings);
+  const resetReservationFlow = useReservationStore((state) => state.resetReservationFlow);
   const insets = useSafeAreaInsets();
 
   const handleLogout = () => {
@@ -31,6 +37,10 @@ export default function ProfileScreen() {
           text: 'Se déconnecter',
           style: 'destructive',
           onPress: async () => {
+            // Clear account-scoped data before changing the auth state. The
+            // auth store remains the only source of truth for the session.
+            clearBookings();
+            resetReservationFlow();
             await logout();
             // The root navigator (AppNavigator) watches `user` and will switch
             // from RootNavigator to AuthNavigator automatically.
@@ -48,13 +58,13 @@ export default function ProfileScreen() {
         {/* Avatar */}
         <View style={styles.avatarWrapper}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarInitial}>{getInitial(user?.name ?? '')}</Text>
+            <Text style={styles.avatarInitial}>{getInitial(userName)}</Text>
           </View>
         </View>
 
         {/* Name + email */}
-        <Text style={styles.name} numberOfLines={1}>{user?.name ?? 'Invité'}</Text>
-        <Text style={styles.email} numberOfLines={1}>{user?.email ?? ''}</Text>
+        <Text style={styles.name} numberOfLines={1}>{userName}</Text>
+        <Text style={styles.email} numberOfLines={1}>{userEmail}</Text>
 
         {/* Profile row — display only, no backend route exists */}
         <View style={styles.row}>

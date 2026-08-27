@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,22 +15,21 @@ import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { payReservation } from '../api/payments';
-import type { Reservation } from '../types';
+import { useAuthStore } from '../store/authStore';
+import { useBookingsStore } from '../store/bookingsStore';
+import { useReservationStore } from '../store/reservationStore';
+import type { Seat } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { PaymentScreenProps } from '../types/navigation';
 
 type PaymentNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Payment'>;
 
-function getRemainingSeconds(reservation: Reservation | undefined): number {
-  if (!reservation?.reservationSeats?.length) return 0;
+function getRemainingSeconds(lockedUntil: string | null): number {
+  if (!lockedUntil) return 0;
   const now = Date.now();
-  const lockedUntils = reservation.reservationSeats
-    .map((rs) => (rs.lockedUntil ? new Date(rs.lockedUntil).getTime() : 0))
-    .filter((t) => t > 0);
-  if (lockedUntils.length === 0) return 0;
-  const maxLockedUntil = Math.max(...lockedUntils);
-  const remaining = Math.floor((maxLockedUntil - now) / 1000);
+  const expiresAt = new Date(lockedUntil).getTime();
+  if (!Number.isFinite(expiresAt)) return 0;
+  const remaining = Math.floor((expiresAt - now) / 1000);
   return Math.max(0, remaining);
 }
 
@@ -50,10 +49,29 @@ function formatFullDate(dateString: string): string {
   });
 }
 
+const EMPTY_SEATS: Seat[] = [];
+
 export default function PaymentScreen({ route }: PaymentScreenProps) {
   const navigation = useNavigation<PaymentNavigationProp>();
   const insets = useSafeAreaInsets();
-  const { movie, screening, reservation, seats } = route.params ?? {};
+  const { movie, screening } = route.params ?? {};
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+
+  const setLastCompletedBooking = useBookingsStore((state) => state.setLastCompletedBooking);
+  const reservation = useReservationStore((state) => state.pendingReservation);
+  const selectedSeatIds = useReservationStore((state) => state.selectedSeatIds);
+  const storeSeats = useReservationStore((state) => state.seats);
+  const lockedUntil = useReservationStore((state) => state.lockedUntil);
+  const isPaying = useReservationStore((state) => state.isPaying);
+  const payReservation = useReservationStore((state) => state.payReservation);
+  const clearReservationDraft = useReservationStore((state) => state.clearReservationDraft);
+  const loadSeats = useReservationStore((state) => state.loadSeats);
+
+  const seats = useMemo(() => {
+    const seatsFromMap = storeSeats.filter((seat) => selectedSeatIds.includes(seat.id));
+    if (seatsFromMap.length > 0) return seatsFromMap;
+    return reservation?.reservationSeats?.map((reservationSeat) => reservationSeat.seat) ?? EMPTY_SEATS;
+  }, [reservation, selectedSeatIds, storeSeats]);
 
   console.log('[DEBUG Payment] route.params:', route.params);
   console.log('[DEBUG Payment] movie:', movie);
@@ -61,63 +79,80 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
   console.log('[DEBUG Payment] reservation:', reservation);
   console.log('[DEBUG Payment] seats:', seats);
 
-  const [remainingSeconds, setRemainingSeconds] = useState(() => getRemainingSeconds(reservation));
-  const [paying, setPaying] = useState(false);
+  const [remainingSeconds, setRemainingSeconds] = useState(() => getRemainingSeconds(lockedUntil));
+  const [expired, setExpired] = useState(false);
 
   const seatLabels = useMemo(() => seats.map((s) => `${s.row}${s.number}`).join(', '), [seats]);
 
   useEffect(() => {
-    setRemainingSeconds(getRemainingSeconds(reservation));
-  }, [reservation]);
+    if (lockedUntil) {
+      setExpired(false);
+      setRemainingSeconds(getRemainingSeconds(lockedUntil));
+    }
+  }, [lockedUntil]);
+
+  const handleReturnToSeats = useCallback(() => {
+    if (movie && screening) {
+      navigation.navigate('SeatMap', { movie, screening });
+    } else {
+      navigation.goBack();
+    }
+  }, [movie, navigation, screening]);
+
+  const handleExpiration = useCallback(() => {
+    setExpired(true);
+    setRemainingSeconds(0);
+    clearReservationDraft();
+    if (screening?.id) {
+      void loadSeats(screening.id, { showLoading: false });
+    }
+    Alert.alert(
+      'Réservation expirée',
+      'Veuillez sélectionner vos sièges à nouveau.',
+      [{ text: 'Choisir des sièges', onPress: handleReturnToSeats }]
+    );
+  }, [clearReservationDraft, handleReturnToSeats, loadSeats, screening?.id]);
 
   useEffect(() => {
-    if (remainingSeconds <= 0) return;
+    if (!lockedUntil || expired) return;
 
-    const interval = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          Alert.alert(
-            'Délai expiré',
-            'Le délai a expiré, vos sièges ont été libérés.',
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  if (movie && screening) {
-                    navigation.navigate('SeatMap', { movie, screening });
-                  } else {
-                    navigation.goBack();
-                  }
-                },
-              },
-            ]
-          );
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    const updateRemaining = () => {
+      const remaining = getRemainingSeconds(lockedUntil);
+      setRemainingSeconds(remaining);
+      if (remaining <= 0) handleExpiration();
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
 
     return () => clearInterval(interval);
-  }, [remainingSeconds, movie, screening, navigation]);
+  }, [expired, handleExpiration, lockedUntil]);
 
-  const isExpired = remainingSeconds <= 0;
+  const isExpired = expired || remainingSeconds <= 0;
   const isUrgent = remainingSeconds < 120;
 
   const handlePay = async () => {
     if (isExpired) {
-      Alert.alert('Délai expiré', 'Veuillez choisir à nouveau vos sièges.');
+      handleExpiration();
       return;
     }
     if (!reservation?.id) {
       Alert.alert('Erreur', 'Aucune réservation à payer.');
       return;
     }
-    setPaying(true);
     try {
-      const result = await payReservation(reservation.id);
+      const result = await payReservation();
       console.log('[DEBUG Payment] payReservation result:', result);
+      if (movie && screening) {
+        setLastCompletedBooking({
+          userId,
+          reservation: result,
+          ticket: result.ticket,
+          movie,
+          screening,
+          seats,
+        });
+      }
       navigation.navigate('Ticket', {
         movie,
         screening,
@@ -125,6 +160,10 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
         ticket: result.ticket,
         seats,
       });
+      // Keep confirmedReservation/paymentResult/ticket in the store while
+      // clearing only the temporary selection and lock after the bookings
+      // store has received the completed booking.
+      clearReservationDraft();
     } catch (err: any) {
       const message = err?.response?.data?.message ?? 'Le paiement a échoué.';
       const isExpiredError = err?.response?.status === 410 || err?.response?.status === 409 || /expir/i.test(message);
@@ -133,17 +172,35 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
           text: isExpiredError ? 'Choisir des sièges' : 'OK',
           onPress: () => {
             if (isExpiredError) {
-              navigation.navigate('SeatMap', { movie, screening });
+              setExpired(true);
+              clearReservationDraft();
+              if (screening?.id) {
+                void loadSeats(screening.id, { showLoading: false });
+              }
+              handleReturnToSeats();
             }
           },
         },
       ]);
-    } finally {
-      setPaying(false);
     }
   };
 
-  if (!reservation || !movie || !screening || !seats) {
+  const renderExpiredState = () => (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      <View style={styles.fallback}>
+        <Text style={styles.fallbackText}>Réservation expirée</Text>
+        <Text style={styles.fallbackText}>Veuillez sélectionner vos sièges à nouveau.</Text>
+        <TouchableOpacity style={styles.fallbackButton} onPress={handleReturnToSeats} activeOpacity={0.9}>
+          <Text style={styles.fallbackButtonText}>Choisir des sièges</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+
+  if (expired) return renderExpiredState();
+
+  if (!reservation || !movie || !screening || seats.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
@@ -245,12 +302,12 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
       {/* Bottom pay button */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
         <TouchableOpacity
-          style={[styles.payButton, (isExpired || paying) && styles.payButtonDisabled]}
+          style={[styles.payButton, (isExpired || isPaying) && styles.payButtonDisabled]}
           onPress={handlePay}
           activeOpacity={0.9}
-          disabled={isExpired || paying}
+          disabled={isExpired || isPaying}
         >
-          {paying ? (
+          {isPaying ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
             <Text style={styles.payButtonText}>Payer {reservation.totalAmount} DH</Text>
