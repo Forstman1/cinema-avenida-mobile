@@ -100,6 +100,12 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
     [weekDateStrings, groupedScreenings]
   );
 
+  const normalizedInitialDate = useMemo(() => {
+    if (!initialDate) return null;
+    const normalized = toISODate(initialDate);
+    return parseLocalDate(normalized) ? normalized : null;
+  }, [initialDate]);
+
   const currentDayScreenings = useMemo(() => {
     if (!selectedDate) return [];
     return groupedScreenings[selectedDate] ?? [];
@@ -122,14 +128,18 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
 
   useEffect(() => {
     if (loading) return;
-    if (selectedDate) return;
 
-    setSelectedDate(
-      initialDate && weekDateStrings.includes(initialDate)
-        ? initialDate
-        : today
+    const preferredDate =
+      normalizedInitialDate && daysWithScreenings.includes(normalizedInitialDate)
+        ? normalizedInitialDate
+        : daysWithScreenings.includes(today)
+          ? today
+          : daysWithScreenings[0] ?? null;
+
+    setSelectedDate((currentDate) =>
+      currentDate && daysWithScreenings.includes(currentDate) ? currentDate : preferredDate
     );
-  }, [groupedScreenings, initialDate, isLoadingScreenings, selectedDate, today, weekDateStrings]);
+  }, [daysWithScreenings, loading, normalizedInitialDate, today]);
 
   const handleDayPress = useCallback((dateString: string) => {
     setSelectedDate(dateString);
@@ -140,7 +150,14 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
     if (selectedId === null) return;
     const screening = currentDayScreenings.find((s) => s.id === selectedId);
     if (!screening) return;
-    navigation.navigate('SeatMap', { movie, screening });
+    navigation.navigate('SeatMap', {
+      movie,
+      screening: {
+        ...screening,
+        date: toISODate(screening.date),
+        movieId: screening.movieId ?? movie.id,
+      },
+    });
   };
 
   const renderCard = (screening: Screening) => {

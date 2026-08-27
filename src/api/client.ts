@@ -1,9 +1,9 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../config/api';
 
-// Replace 192.168.X.X with your development machine's local IP address.
 const apiClient: AxiosInstance = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: API_BASE_URL,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',

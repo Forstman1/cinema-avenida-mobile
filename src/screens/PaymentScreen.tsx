@@ -18,7 +18,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import { useBookingsStore } from '../store/bookingsStore';
 import { useReservationStore } from '../store/reservationStore';
-import type { Seat } from '../types';
+import { parseLocalDate, toISODate } from '../utils/date';
+import type { Movie, Reservation, Screening, Seat } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { PaymentScreenProps } from '../types/navigation';
 
@@ -40,8 +41,8 @@ function formatCountdown(totalSeconds: number): string {
 }
 
 function formatFullDate(dateString: string): string {
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return dateString;
+  const date = parseLocalDate(toISODate(dateString));
+  if (!date) return dateString;
   return date.toLocaleDateString('fr-FR', {
     day: 'numeric',
     month: 'long',
@@ -51,45 +52,119 @@ function formatFullDate(dateString: string): string {
 
 const EMPTY_SEATS: Seat[] = [];
 
+function getReservationLockedUntil(reservation: Reservation | null): string | null {
+  const values = (reservation?.reservationSeats ?? [])
+    .map((reservationSeat) => reservationSeat.lockedUntil)
+    .filter(
+      (value): value is string =>
+        typeof value === 'string' && value.length > 0 && !Number.isNaN(Date.parse(value))
+    );
+
+  if (values.length === 0) return null;
+  return values.reduce((latest, value) =>
+    Date.parse(value) > Date.parse(latest) ? value : latest
+  );
+}
+
+function normalizeReservation(
+  source: Reservation | null | undefined,
+  movie: Movie | undefined,
+  screening: Screening | undefined,
+  seats: Seat[] | undefined
+): Reservation | null {
+  if (!source || !Number.isInteger(source.id)) return null;
+
+  const baseScreening = source.screening ?? screening;
+  const normalizedScreening = baseScreening && movie
+    ? {
+        ...baseScreening,
+        date: toISODate(baseScreening.date),
+        movieId: baseScreening.movieId ?? movie.id,
+        movie: source.screening?.movie ?? movie,
+      }
+    : source.screening;
+
+  const reservationSeats = source.reservationSeats?.length
+    ? source.reservationSeats
+    : (seats ?? []).map((seat) => ({
+        id: seat.id,
+        seatId: seat.id,
+        seat,
+      }));
+
+  return {
+    ...source,
+    ...(normalizedScreening ? { screening: normalizedScreening } : {}),
+    ...(reservationSeats.length > 0 ? { reservationSeats } : {}),
+  };
+}
+
 export default function PaymentScreen({ route }: PaymentScreenProps) {
   const navigation = useNavigation<PaymentNavigationProp>();
   const insets = useSafeAreaInsets();
-  const { movie, screening } = route.params ?? {};
+  const { movie, screening, reservation: routeReservation, seats: routeSeats } = route.params ?? {};
   const userId = useAuthStore((state) => state.user?.id ?? null);
 
   const setLastCompletedBooking = useBookingsStore((state) => state.setLastCompletedBooking);
-  const reservation = useReservationStore((state) => state.pendingReservation);
-  const selectedSeatIds = useReservationStore((state) => state.selectedSeatIds);
-  const storeSeats = useReservationStore((state) => state.seats);
+  const storeReservation = useReservationStore((state) => state.pendingReservation);
+  const currentScreeningId = useReservationStore((state) => state.currentScreeningId);
   const lockedUntil = useReservationStore((state) => state.lockedUntil);
   const isPaying = useReservationStore((state) => state.isPaying);
   const payReservation = useReservationStore((state) => state.payReservation);
   const clearReservationDraft = useReservationStore((state) => state.clearReservationDraft);
   const loadSeats = useReservationStore((state) => state.loadSeats);
+  const hydrateReservation = useReservationStore((state) => state.hydrateReservation);
 
-  const seats = useMemo(() => {
-    const seatsFromMap = storeSeats.filter((seat) => selectedSeatIds.includes(seat.id));
-    if (seatsFromMap.length > 0) return seatsFromMap;
-    return reservation?.reservationSeats?.map((reservationSeat) => reservationSeat.seat) ?? EMPTY_SEATS;
-  }, [reservation, selectedSeatIds, storeSeats]);
+  const reservation = useMemo(() => {
+    const source = routeReservation && Number.isInteger(routeReservation.id)
+      ? routeReservation
+      : storeReservation;
+    return normalizeReservation(source, movie, screening, routeSeats);
+  }, [movie, routeReservation, routeSeats, screening, storeReservation]);
 
-  console.log('[DEBUG Payment] route.params:', route.params);
-  console.log('[DEBUG Payment] movie:', movie);
-  console.log('[DEBUG Payment] screening:', screening);
-  console.log('[DEBUG Payment] reservation:', reservation);
-  console.log('[DEBUG Payment] seats:', seats);
+  const seats = useMemo(
+    () => reservation?.reservationSeats?.map((reservationSeat) => reservationSeat.seat) ?? EMPTY_SEATS,
+    [reservation]
+  );
 
-  const [remainingSeconds, setRemainingSeconds] = useState(() => getRemainingSeconds(lockedUntil));
+  const reservationLockedUntil = useMemo(
+    () => getReservationLockedUntil(reservation),
+    [reservation]
+  );
+  const effectiveLockedUntil = reservationLockedUntil ??
+    (storeReservation?.id === reservation?.id ? lockedUntil : null);
+
+  useEffect(() => {
+    if (!reservation) return;
+    if (
+      storeReservation?.id !== reservation.id ||
+      currentScreeningId !== reservation.screening?.id ||
+      lockedUntil !== reservationLockedUntil
+    ) {
+      hydrateReservation(reservation, seats);
+    }
+  }, [
+    currentScreeningId,
+    hydrateReservation,
+    lockedUntil,
+    reservation,
+    reservationLockedUntil,
+    seats,
+    storeReservation?.id,
+  ]);
+
+  const [remainingSeconds, setRemainingSeconds] = useState(() =>
+    getRemainingSeconds(effectiveLockedUntil)
+  );
   const [expired, setExpired] = useState(false);
 
   const seatLabels = useMemo(() => seats.map((s) => `${s.row}${s.number}`).join(', '), [seats]);
 
   useEffect(() => {
-    if (lockedUntil) {
-      setExpired(false);
-      setRemainingSeconds(getRemainingSeconds(lockedUntil));
-    }
-  }, [lockedUntil]);
+    const remaining = getRemainingSeconds(effectiveLockedUntil);
+    setExpired(remaining <= 0);
+    setRemainingSeconds(remaining);
+  }, [effectiveLockedUntil]);
 
   const handleReturnToSeats = useCallback(() => {
     if (movie && screening) {
@@ -114,10 +189,10 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
   }, [clearReservationDraft, handleReturnToSeats, loadSeats, screening?.id]);
 
   useEffect(() => {
-    if (!lockedUntil || expired) return;
+    if (!effectiveLockedUntil || expired) return;
 
     const updateRemaining = () => {
-      const remaining = getRemainingSeconds(lockedUntil);
+      const remaining = getRemainingSeconds(effectiveLockedUntil);
       setRemainingSeconds(remaining);
       if (remaining <= 0) handleExpiration();
     };
@@ -126,7 +201,7 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
     const interval = setInterval(updateRemaining, 1000);
 
     return () => clearInterval(interval);
-  }, [expired, handleExpiration, lockedUntil]);
+  }, [effectiveLockedUntil, expired, handleExpiration]);
 
   const isExpired = expired || remainingSeconds <= 0;
   const isUrgent = remainingSeconds < 120;
@@ -142,7 +217,6 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
     }
     try {
       const result = await payReservation();
-      console.log('[DEBUG Payment] payReservation result:', result);
       if (movie && screening) {
         setLastCompletedBooking({
           userId,

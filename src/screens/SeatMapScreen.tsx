@@ -64,10 +64,6 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
   const insets = useSafeAreaInsets();
   const { movie, screening } = route.params ?? {};
 
-  console.log('[DEBUG SeatMap] route.params:', route.params);
-  console.log('[DEBUG SeatMap] movie:', movie);
-  console.log('[DEBUG SeatMap] screening:', screening);
-
   const [refreshing, setRefreshing] = useState(false);
   const [pendingRemaining, setPendingRemaining] = useState(0);
 
@@ -130,11 +126,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
   };
 
   const fetchSeats = useCallback(async (showLoading = true) => {
-    if (!screening?.id) {
-      console.log('[DEBUG SeatMap] fetchSeats aborted: no screening.id');
-      return;
-    }
-    console.log('[DEBUG SeatMap] fetchSeats start, screeningId:', screening.id);
+    if (!screening?.id) return;
     await loadSeats(screening.id, { showLoading });
     await loadPendingReservation(screening.id);
   }, [loadPendingReservation, loadSeats, screening?.id]);
@@ -181,7 +173,6 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     if (!screening?.id || selectedSeatIds.length === 0 || hasPendingReservation) return;
     try {
       const reservation = await lockSelectedSeats(screening.id);
-      console.log('[DEBUG SeatMap] lockSeats success reservation:', reservation);
       navigation.navigate('Payment', {
         movie,
         screening,
@@ -189,7 +180,6 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
         seats: selectedSeats,
       });
     } catch (err: any) {
-      console.log('[DEBUG SeatMap] lockSeats error:', err?.message, err?.response?.data, err?.response?.status);
       if (err.response?.status === 409) {
         const errorData = err.response.data ?? {};
 
@@ -212,7 +202,6 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
         // Case 2: some selected seats were taken by someone else.
         const unavailable: { id: number }[] = errorData.seats ?? [];
         const unavailableIds = unavailable.map((s) => s.id);
-        console.log('[DEBUG SeatMap] 409 unavailable seats:', unavailable);
         deselectSeats(unavailableIds);
         await fetchSeats(false);
         Alert.alert(
@@ -241,7 +230,10 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     if (isSelected) {
       seatStyle = [styles.seat, styles.seatSelected];
     } else if (!tappable) {
-      seatStyle = [styles.seat, styles.seatOccupied];
+      seatStyle = [
+        styles.seat,
+        seat.status === 'VERROUILLE' ? styles.seatLocked : styles.seatOccupied,
+      ];
     } else {
       seatStyle = [
         styles.seat,
@@ -399,6 +391,10 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
             <View style={styles.legendItem}>
               <View style={[styles.legendSeat, styles.seatOccupied]} />
               <Text style={styles.legendName}>Occupé</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendSeat, styles.seatLocked]} />
+              <Text style={styles.legendName}>Verrouillé</Text>
             </View>
           </View>
         </View>
@@ -601,7 +597,12 @@ const styles = StyleSheet.create({
   },
   seatOccupied: {
     backgroundColor: '#3a3a3a',
-    borderColor: '#3a3a3a',
+    borderColor: '#666',
+  },
+  seatLocked: {
+    backgroundColor: '#553030',
+    borderColor: '#b45b5b',
+    borderStyle: 'dashed',
   },
   seatNumber: {
     fontFamily: 'Inter-Bold',

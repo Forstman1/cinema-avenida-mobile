@@ -26,6 +26,7 @@ export interface ReservationStore {
   reservationError: string | null;
   loadSeats: (screeningId: number, options?: LoadSeatsOptions) => Promise<void>;
   loadPendingReservation: (screeningId: number) => Promise<void>;
+  hydrateReservation: (reservation: Reservation, seats?: Seat[]) => void;
   toggleSeat: (seatId: number) => void;
   deselectSeats: (seatIds: number[]) => void;
   clearReservationDraft: () => void;
@@ -157,6 +158,23 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
       // Pending reservations are a convenience for resuming payment; a
       // failure here must not prevent the seat map from loading.
     }
+  },
+
+  hydrateReservation: (reservation, seats = []) => {
+    const reservationSeatIds = getReservationSeatIds(reservation);
+    const screeningId = reservation.screening?.id ?? null;
+
+    set({
+      currentScreeningId: screeningId,
+      seats: seats.length > 0 ? seats : get().seats,
+      selectedSeatIds: reservationSeatIds.length > 0
+        ? reservationSeatIds
+        : seats.map((seat) => seat.id),
+      reservationId: reservation.id,
+      pendingReservation: reservation,
+      lockedUntil: getLockedUntil(reservation),
+      reservationError: null,
+    });
   },
 
   toggleSeat: (seatId) => {

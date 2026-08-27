@@ -23,6 +23,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   getRemainingDaysOfWeek,
   getTodayDateString,
+  isScreeningInFuture,
   parseLocalDate,
   toISODate,
   toISODateString,
@@ -119,7 +120,9 @@ function CustomerHomeScreen() {
 
   const hasScreeningsThisWeek = useMemo(
     () => movies.some((movie) =>
-      (movie.screenings ?? []).some((screening) => weekDateStrings.includes(toISODate(screening.date)))
+      (movie.screenings ?? []).some((screening) =>
+        weekDateStrings.includes(toISODate(screening.date)) && isScreeningInFuture(screening)
+      )
     ),
     [movies, weekDateStrings]
   );

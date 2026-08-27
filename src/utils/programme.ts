@@ -1,5 +1,5 @@
 import type { Movie, Screening } from '../types';
-import { compareShowTimes, toISODate } from './date';
+import { compareShowTimes, isScreeningInFuture, toISODate } from './date';
 
 export type ProgrammeMovie = { movie: Movie; screenings: Screening[] };
 
@@ -11,7 +11,10 @@ export function getUniqueScreeningsForDate(
   const seenTimes = new Set<string>();
 
   return (movie.screenings ?? [])
-    .filter((screening) => toISODate(screening.date) === dateString)
+    .filter(
+      (screening) =>
+        toISODate(screening.date) === dateString && isScreeningInFuture(screening)
+    )
     .sort((a, b) => compareShowTimes(a.showTime, b.showTime))
     .filter((screening) => {
       if (seenIds.has(screening.id) || seenTimes.has(screening.showTime)) return false;
