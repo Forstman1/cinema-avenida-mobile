@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 
 interface PosterImageProps {
   uri?: string | null;
   title?: string;
-  style?: any;
+  style?: StyleProp<ViewStyle>;
   contentFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
   borderRadius?: number;
 }

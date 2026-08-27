@@ -1,20 +1,16 @@
 import apiClient from './client';
-import type { LoginResponse, SignupResponse } from '../types';
+import { request } from './errors';
+import type {
+  LoginRequest,
+  LoginResponse,
+  SignupRequest,
+  SignupResponse,
+} from '../types';
 
-export async function loginRequest(email: string, password: string): Promise<LoginResponse> {
-  const response = await apiClient.post<LoginResponse>('/auth/login', { email, password });
-  return response.data;
+export async function loginRequest(payload: LoginRequest): Promise<LoginResponse> {
+  return request(apiClient.post<LoginResponse>('/auth/login', payload));
 }
 
-export async function signupRequest(
-  name: string,
-  email: string,
-  password: string
-): Promise<SignupResponse> {
-  const response = await apiClient.post<SignupResponse>('/auth/signup', {
-    name,
-    email,
-    password,
-  });
-  return response.data;
+export async function signupRequest(payload: SignupRequest): Promise<SignupResponse> {
+  return request(apiClient.post<SignupResponse>('/auth/signup', payload));
 }

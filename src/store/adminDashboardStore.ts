@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { getAdminDashboard } from '../api/admin';
+import { getApiErrorMessage } from '../api/errors';
 import type { AdminDashboard as AdminDashboardData } from '../types';
 import { useAuthStore } from './authStore';
 
@@ -21,29 +22,6 @@ let inFlightDashboardRequest: Promise<void> | null = null;
 
 function isAdmin(): boolean {
   return useAuthStore.getState().user?.role === ADMIN_ROLE;
-}
-
-function getErrorMessage(error: unknown): string {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'response' in error &&
-    typeof error.response === 'object' &&
-    error.response !== null &&
-    'data' in error.response &&
-    typeof error.response.data === 'object' &&
-    error.response.data !== null &&
-    'message' in error.response.data &&
-    typeof error.response.data.message === 'string'
-  ) {
-    return error.response.data.message;
-  }
-
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return 'Impossible de charger le tableau de bord.';
 }
 
 export const useAdminDashboardStore = create<AdminDashboardStore>((set, get) => {
@@ -76,9 +54,9 @@ export const useAdminDashboardStore = create<AdminDashboardStore>((set, get) => 
         }
 
         set({ dashboard, error: null });
-      } catch (error) {
+      } catch (error: unknown) {
         if (requestGeneration === dashboardGeneration) {
-          set({ error: getErrorMessage(error) });
+          set({ error: getApiErrorMessage(error, 'Impossible de charger le tableau de bord.') });
         }
       } finally {
         if (requestGeneration === dashboardGeneration) {
@@ -115,7 +93,7 @@ export const useAdminDashboardStore = create<AdminDashboardStore>((set, get) => 
         return inFlightDashboardRequest;
       }
 
-      return startRequest(false);
+      return startRequest(Boolean(get().dashboard));
     },
 
     refreshDashboard: () => {
@@ -137,17 +115,4 @@ export const useAdminDashboardStore = create<AdminDashboardStore>((set, get) => 
       });
     },
   };
-});
-
-let knownAuthIdentity = `${useAuthStore.getState().user?.id ?? 'none'}:${
-  useAuthStore.getState().user?.role ?? 'none'
-}`;
-
-useAuthStore.subscribe((state) => {
-  const nextAuthIdentity = `${state.user?.id ?? 'none'}:${state.user?.role ?? 'none'}`;
-
-  if (nextAuthIdentity !== knownAuthIdentity) {
-    knownAuthIdentity = nextAuthIdentity;
-    useAdminDashboardStore.getState().clearDashboard();
-  }
 });

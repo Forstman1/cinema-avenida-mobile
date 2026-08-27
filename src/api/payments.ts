@@ -1,10 +1,16 @@
 import apiClient from './client';
-import type { Reservation, Ticket } from '../types';
+import { request } from './errors';
+import { normalizeReservation } from './normalizers';
+import type {
+  PayReservationRequest,
+  PayReservationResponse,
+} from '../types';
 
-// Backend returns the reservation with the ticket nested inside it.
-export type PayReservationResponse = Reservation & { ticket: Ticket };
-
-export async function payReservation(reservationId: number): Promise<PayReservationResponse> {
-  const response = await apiClient.post<PayReservationResponse>(`/reservations/${reservationId}/pay`);
-  return response.data;
+export async function payReservation(
+  reservationId: PayReservationRequest
+): Promise<PayReservationResponse> {
+  const reservation = await request(
+    apiClient.post<PayReservationResponse>(`/reservations/${reservationId}/pay`)
+  );
+  return normalizeReservation(reservation) as PayReservationResponse;
 }

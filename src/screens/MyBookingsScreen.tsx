@@ -17,6 +17,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+import { getApiErrorMessage } from '../api/errors';
 import ErrorState from '../components/ErrorState';
 import PosterImage from '../components/PosterImage';
 import { useAuthStore } from '../store/authStore';
@@ -170,8 +171,8 @@ export default function MyBookingsScreen() {
             try {
               await cancelReservation(reservation.id);
               Alert.alert('Annulée', 'Votre réservation a été annulée.');
-            } catch (err: any) {
-              Alert.alert('Erreur', err?.response?.data?.message ?? 'Impossible d\'annuler.');
+            } catch (error: unknown) {
+              Alert.alert('Erreur', getApiErrorMessage(error, 'Impossible d\'annuler.'));
             }
           },
         },
@@ -213,7 +214,7 @@ export default function MyBookingsScreen() {
       screening,
       reservation,
       seats,
-    } as never);
+    });
   };
 
   const renderCard = (reservation: Reservation, dimmed: boolean) => {
@@ -332,7 +333,7 @@ export default function MyBookingsScreen() {
       {activeTab === 'upcoming' ? (
         <TouchableOpacity
           style={styles.emptyButton}
-          onPress={() => navigation.navigate('Main', { screen: 'Accueil' } as never)}
+          onPress={() => navigation.navigate('Main', { screen: 'Accueil' })}
           activeOpacity={0.9}
           accessibilityRole="button"
         >

@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 
-import { payReservation as payReservationRequest, type PayReservationResponse } from '../api/payments';
+import { getApiErrorMessage } from '../api/errors';
+import { payReservation as payReservationRequest } from '../api/payments';
 import { getMyReservations } from '../api/reservations';
 import { getSeatsByScreeningId, lockSeats as lockSeatsRequest } from '../api/seats';
-import type { Reservation, Seat, Ticket } from '../types';
+import type { PayReservationResponse, Reservation, Seat, Ticket } from '../types';
 
 export interface LoadSeatsOptions {
   showLoading?: boolean;
@@ -20,6 +21,8 @@ export interface ReservationStore {
   paymentResult: PayReservationResponse | null;
   ticket: Ticket | null;
   isLoadingSeats: boolean;
+  isRefreshingSeats: boolean;
+  isLoadingPendingReservation: boolean;
   isLocking: boolean;
   isPaying: boolean;
   seatError: string | null;
@@ -33,10 +36,6 @@ export interface ReservationStore {
   lockSelectedSeats: (screeningId: number) => Promise<Reservation>;
   payReservation: () => Promise<PayReservationResponse>;
   resetReservationFlow: () => void;
-}
-
-function getErrorMessage(error: any, fallback: string): string {
-  return error?.response?.data?.message ?? error?.message ?? fallback;
 }
 
 function getLockedUntil(reservation: Reservation | null): string | null {
@@ -75,6 +74,10 @@ function emptyReservationState() {
 }
 
 let reservationFlowGeneration = 0;
+const inFlightSeats = new Map<number, Promise<void>>();
+const seatRequestIds = new Map<number, number>();
+const inFlightPendingReservations = new Map<number, Promise<void>>();
+const pendingRequestIds = new Map<number, number>();
 
 export const useReservationStore = create<ReservationStore>((set, get) => ({
   currentScreeningId: null,
@@ -87,6 +90,8 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
   paymentResult: null,
   ticket: null,
   isLoadingSeats: false,
+  isRefreshingSeats: false,
+  isLoadingPendingReservation: false,
   isLocking: false,
   isPaying: false,
   seatError: null,
@@ -95,72 +100,146 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
   loadSeats: async (screeningId, { showLoading = true } = {}) => {
     const screeningChanged = get().currentScreeningId !== screeningId;
     if (screeningChanged) {
+      reservationFlowGeneration += 1;
+      inFlightSeats.clear();
+      inFlightPendingReservations.clear();
+      seatRequestIds.clear();
+      pendingRequestIds.clear();
       set({
         currentScreeningId: screeningId,
         seats: [],
         selectedSeatIds: [],
         ...emptyReservationState(),
+        confirmedReservation: null,
+        paymentResult: null,
+        ticket: null,
+        isLocking: false,
+        isPaying: false,
         seatError: null,
       });
     }
 
-    if (showLoading) set({ isLoadingSeats: true });
-    set({ seatError: null });
+    const existingRequest = inFlightSeats.get(screeningId);
+    if (existingRequest) return existingRequest;
 
-    try {
-      const seats = await getSeatsByScreeningId(screeningId);
-      if (get().currentScreeningId !== screeningId) return;
-      const availableSeatIds = new Set(
-        seats.filter((seat) => seat.status === 'LIBRE').map((seat) => seat.id)
-      );
-      set({
-        seats,
-        selectedSeatIds: get().selectedSeatIds.filter((seatId) => availableSeatIds.has(seatId)),
-        seatError: null,
-      });
-    } catch (error: any) {
-      if (get().currentScreeningId === screeningId) {
-        set({ seatError: getErrorMessage(error, 'Impossible de charger les sièges.') });
+    const generation = reservationFlowGeneration;
+    const requestId = (seatRequestIds.get(screeningId) ?? 0) + 1;
+    seatRequestIds.set(screeningId, requestId);
+    const hasCachedSeats = get().currentScreeningId === screeningId && get().seats.length > 0;
+    set({
+      isLoadingSeats: showLoading && !hasCachedSeats,
+      isRefreshingSeats: hasCachedSeats,
+      seatError: null,
+    });
+
+    let request: Promise<void> | null = null;
+    request = (async () => {
+      try {
+        const seats = await getSeatsByScreeningId(screeningId);
+        if (
+          generation !== reservationFlowGeneration ||
+          get().currentScreeningId !== screeningId ||
+          seatRequestIds.get(screeningId) !== requestId
+        ) return;
+        const availableSeatIds = new Set(
+          seats.filter((seat) => seat.status === 'LIBRE').map((seat) => seat.id)
+        );
+        set({
+          seats,
+          selectedSeatIds: get().selectedSeatIds.filter((seatId) => availableSeatIds.has(seatId)),
+          seatError: null,
+        });
+      } catch (error: unknown) {
+        if (
+          generation !== reservationFlowGeneration ||
+          get().currentScreeningId !== screeningId ||
+          seatRequestIds.get(screeningId) !== requestId
+        ) return;
+        set({ seatError: getApiErrorMessage(error, 'Impossible de charger les sièges.') });
+      } finally {
+        if (
+          generation === reservationFlowGeneration &&
+          get().currentScreeningId === screeningId &&
+          seatRequestIds.get(screeningId) === requestId
+        ) {
+          set({ isLoadingSeats: false, isRefreshingSeats: false });
+        }
+        if (inFlightSeats.get(screeningId) === request) inFlightSeats.delete(screeningId);
       }
-    } finally {
-      if (showLoading && get().currentScreeningId === screeningId) {
-        set({ isLoadingSeats: false });
-      }
-    }
+    })();
+
+    const startedRequest = request as Promise<void>;
+    inFlightSeats.set(screeningId, startedRequest);
+    return startedRequest;
   },
 
   loadPendingReservation: async (screeningId) => {
     if (get().currentScreeningId !== screeningId) return;
 
-    try {
-      const reservations = await getMyReservations();
-      if (get().currentScreeningId !== screeningId) return;
+    const existingRequest = inFlightPendingReservations.get(screeningId);
+    if (existingRequest) return existingRequest;
 
-      const pending = reservations.find((reservation) => {
-        if (reservation.status !== 'EN_ATTENTE' || reservation.screening?.id !== screeningId) {
-          return false;
+    const generation = reservationFlowGeneration;
+    const requestId = (pendingRequestIds.get(screeningId) ?? 0) + 1;
+    pendingRequestIds.set(screeningId, requestId);
+    set({ isLoadingPendingReservation: true, reservationError: null });
+
+    let request: Promise<void> | null = null;
+    request = (async () => {
+      try {
+        const reservations = await getMyReservations();
+        if (
+          generation !== reservationFlowGeneration ||
+          get().currentScreeningId !== screeningId ||
+          pendingRequestIds.get(screeningId) !== requestId
+        ) return;
+
+        const pending = reservations.find((reservation) => {
+          if (reservation.status !== 'EN_ATTENTE' || reservation.screening?.id !== screeningId) {
+            return false;
+          }
+          return hasActiveLock(getLockedUntil(reservation));
+        }) ?? null;
+
+        if (pending) {
+          set({
+            pendingReservation: pending,
+            reservationId: pending.id,
+            selectedSeatIds: getReservationSeatIds(pending),
+            lockedUntil: getLockedUntil(pending),
+            reservationError: null,
+          });
+        } else {
+          set(emptyReservationState());
         }
-        return hasActiveLock(getLockedUntil(reservation));
-      }) ?? null;
-
-      if (pending) {
-        set({
-          pendingReservation: pending,
-          reservationId: pending.id,
-          selectedSeatIds: getReservationSeatIds(pending),
-          lockedUntil: getLockedUntil(pending),
-          reservationError: null,
-        });
-      } else {
-        set(emptyReservationState());
+      } catch {
+        // Pending reservations are optional resume data; a failed lookup must
+        // not prevent the seat map from loading or replace a valid draft.
+      } finally {
+        if (
+          generation === reservationFlowGeneration &&
+          get().currentScreeningId === screeningId &&
+          pendingRequestIds.get(screeningId) === requestId
+        ) {
+          set({ isLoadingPendingReservation: false });
+        }
+        if (inFlightPendingReservations.get(screeningId) === request) {
+          inFlightPendingReservations.delete(screeningId);
+        }
       }
-    } catch {
-      // Pending reservations are a convenience for resuming payment; a
-      // failure here must not prevent the seat map from loading.
-    }
+    })();
+
+    const startedRequest = request as Promise<void>;
+    inFlightPendingReservations.set(screeningId, startedRequest);
+    return startedRequest;
   },
 
   hydrateReservation: (reservation, seats = []) => {
+    reservationFlowGeneration += 1;
+    inFlightSeats.clear();
+    inFlightPendingReservations.clear();
+    seatRequestIds.clear();
+    pendingRequestIds.clear();
     const reservationSeatIds = getReservationSeatIds(reservation);
     const screeningId = reservation.screening?.id ?? null;
 
@@ -201,11 +280,27 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
   },
 
   clearReservationDraft: () => {
-    set({ selectedSeatIds: [], ...emptyReservationState() });
+    reservationFlowGeneration += 1;
+    inFlightSeats.clear();
+    inFlightPendingReservations.clear();
+    seatRequestIds.clear();
+    pendingRequestIds.clear();
+    set({
+      selectedSeatIds: [],
+      ...emptyReservationState(),
+      isLoadingSeats: false,
+      isRefreshingSeats: false,
+      isLoadingPendingReservation: false,
+      isLocking: false,
+      isPaying: false,
+    });
   },
 
   lockSelectedSeats: async (screeningId) => {
     const state = get();
+    if (state.isLocking || state.isPaying) {
+      throw new Error('Une action de réservation est déjà en cours.');
+    }
     if (state.currentScreeningId !== screeningId) {
       throw new Error('La séance sélectionnée n\'est plus disponible.');
     }
@@ -227,10 +322,14 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
       throw new Error('Certains sièges ne sont plus disponibles.');
     }
 
+    const generation = reservationFlowGeneration;
     set({ isLocking: true, reservationError: null });
     try {
       const reservation = await lockSeatsRequest({ screeningId, seatIds: selectedSeatIds });
-      if (get().currentScreeningId !== screeningId) {
+      if (
+        generation !== reservationFlowGeneration ||
+        get().currentScreeningId !== screeningId
+      ) {
         throw new Error('La séance sélectionnée n\'est plus disponible.');
       }
       set({
@@ -240,17 +339,22 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
         reservationError: null,
       });
       return reservation;
-    } catch (error: any) {
-      set({ reservationError: getErrorMessage(error, 'Impossible de verrouiller les sièges.') });
+    } catch (error: unknown) {
+      if (generation === reservationFlowGeneration) {
+        set({ reservationError: getApiErrorMessage(error, 'Impossible de verrouiller les sièges.') });
+      }
       throw error;
     } finally {
-      set({ isLocking: false });
+      if (generation === reservationFlowGeneration) set({ isLocking: false });
     }
   },
 
   payReservation: async () => {
     const state = get();
     const generation = reservationFlowGeneration;
+    if (state.isPaying || state.isLocking) {
+      throw new Error('Une action de réservation est déjà en cours.');
+    }
     const reservationId = state.reservationId ?? state.pendingReservation?.id;
     if (!reservationId) {
       const error = new Error('Aucune réservation à payer.');
@@ -272,15 +376,17 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
       set({
         confirmedReservation: result,
         paymentResult: result,
+        pendingReservation: result,
+        reservationId: result.id,
         ticket: result.ticket,
         reservationError: null,
       });
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (generation !== reservationFlowGeneration) {
         throw error;
       }
-      set({ reservationError: getErrorMessage(error, 'Le paiement a échoué.') });
+      set({ reservationError: getApiErrorMessage(error, 'Le paiement a échoué.') });
       throw error;
     } finally {
       if (generation === reservationFlowGeneration) {
@@ -291,6 +397,10 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
 
   resetReservationFlow: () => {
     reservationFlowGeneration += 1;
+    inFlightSeats.clear();
+    inFlightPendingReservations.clear();
+    seatRequestIds.clear();
+    pendingRequestIds.clear();
     set({
       currentScreeningId: null,
       seats: [],
@@ -300,6 +410,8 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
       paymentResult: null,
       ticket: null,
       isLoadingSeats: false,
+      isRefreshingSeats: false,
+      isLoadingPendingReservation: false,
       isLocking: false,
       isPaying: false,
       seatError: null,

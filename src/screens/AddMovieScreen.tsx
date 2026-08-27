@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+import { getApiErrorMessage } from '../api/errors';
 import { getRawMovieById } from '../api/movies';
 import { useAdminMoviesStore } from '../store/adminMoviesStore';
 import type { RootStackParamList } from '../types/navigation';
@@ -95,10 +96,10 @@ export default function AddMovieScreen({ route }: AddMovieScreenProps) {
         if (!savedMovie) return;
         Alert.alert('Film créé', '', [{ text: 'OK', onPress: () => navigation.goBack() }]);
       }
-    } catch (err: any) {
+    } catch (error: unknown) {
       Alert.alert(
         'Erreur',
-        err?.response?.data?.message ?? submissionError ?? 'Impossible d\'enregistrer le film.'
+        getApiErrorMessage(error, submissionError ?? 'Impossible d\'enregistrer le film.')
       );
     }
   };

@@ -16,12 +16,13 @@ import NativeQRCode from '../components/NativeQRCode';
 import { useAuthStore } from '../store/authStore';
 import { useBookingsStore } from '../store/bookingsStore';
 import { formatScreeningDate } from '../utils/date';
+import type { ReservationStatus, SeatCategory, TicketStatus } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { TicketScreenProps } from '../types/navigation';
 
 type TicketNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Ticket'>;
 
-function formatZoneLabel(seats: { category: string }[]): string {
+function formatZoneLabel(seats: { category: SeatCategory }[]): string {
   const categories = Array.from(new Set(seats.map((s) => s.category)));
   if (categories.length === 1) {
     return categories[0].charAt(0) + categories[0].slice(1).toLowerCase();
@@ -29,19 +30,16 @@ function formatZoneLabel(seats: { category: string }[]): string {
   return 'Mixte';
 }
 
-function formatReservationStatus(status: string): string {
+function formatReservationStatus(status: ReservationStatus): string {
   if (status === 'CANCELLED') return 'ANNULÉE';
   if (status === 'EN_ATTENTE') return 'EN ATTENTE';
   if (status === 'CONFIRMED') return 'CONFIRMÉE';
   return status;
 }
 
-function formatTicketStatus(status: string | undefined, isCancelled: boolean): string {
+function formatTicketStatus(status: TicketStatus, isCancelled: boolean): string {
   if (isCancelled || status === 'CANCELLED') return 'ANNULÉ';
-  if (!status) return 'VALIDE';
-  if (status === 'USED') return 'UTILISÉ';
-  if (status === 'ACTIVE' || status === 'VALID') return 'VALIDE';
-  return status;
+  return 'VALIDE';
 }
 
 export default function TicketScreen({ route }: TicketScreenProps) {
@@ -67,7 +65,7 @@ export default function TicketScreen({ route }: TicketScreenProps) {
   const zoneLabel = useMemo(() => formatZoneLabel(seats), [seats]);
 
   const handleViewBookings = () => {
-    navigation.navigate('Main', { screen: 'Mes Billets' } as never);
+    navigation.navigate('Main', { screen: 'Mes Billets' });
   };
 
   if (!movie || !screening || !reservation || !ticket) {

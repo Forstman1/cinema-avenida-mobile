@@ -1,14 +1,13 @@
 import { create } from 'zustand';
+import { getApiErrorDetails, getApiErrorMessage } from '../api/errors';
 
 import {
   createScreening as createScreeningRequest,
   getScreeningsByDate,
   getScreeningsByMovieId,
-  type ScreeningPayload,
 } from '../api/movies';
-import type { Screening } from '../types';
+import type { ISODateString, Screening, ScreeningRequest } from '../types';
 import { compareShowTimes, toISODate } from '../utils/date';
-import { useAuthStore } from './authStore';
 
 export interface FetchScreeningsOptions {
   force?: boolean;
@@ -22,29 +21,27 @@ interface NormalizedScreenings {
 
 export interface AdminScreeningsStore extends NormalizedScreenings {
   isLoadingByDate: Record<string, boolean>;
+  isRefreshingByDate: Record<string, boolean>;
   isLoadingByMovieId: Record<number, boolean>;
+  isRefreshingByMovieId: Record<number, boolean>;
   dateErrors: Record<string, string | null>;
   movieErrors: Record<number, string | null>;
   isCreatingScreening: boolean;
   createScreeningError: string | null;
   lastCreatedScreening: Screening | null;
-  fetchScreeningsByDate: (date: string, options?: FetchScreeningsOptions) => Promise<Screening[]>;
-  refreshScreeningsByDate: (date: string) => Promise<Screening[]>;
+  fetchScreeningsByDate: (date: ISODateString, options?: FetchScreeningsOptions) => Promise<Screening[]>;
+  refreshScreeningsByDate: (date: ISODateString) => Promise<Screening[]>;
   fetchScreeningsByMovieId: (movieId: number, options?: FetchScreeningsOptions) => Promise<Screening[]>;
   refreshScreeningsByMovieId: (movieId: number) => Promise<Screening[]>;
-  createScreening: (payload: ScreeningPayload) => Promise<Screening | null>;
-  invalidateDate: (date: string) => void;
+  createScreening: (payload: ScreeningRequest) => Promise<Screening | null>;
+  invalidateDate: (date: ISODateString) => void;
   invalidateMovie: (movieId: number) => void;
   clearCreateError: () => void;
   clearScreenings: () => void;
   reset: () => void;
 }
 
-function getErrorMessage(error: any, fallback: string): string {
-  return error?.response?.data?.message ?? error?.message ?? fallback;
-}
-
-function getDateKey(date: string): string {
+function getDateKey(date: string): ISODateString {
   return toISODate(date);
 }
 
@@ -131,13 +128,20 @@ function replaceMovie(
 }
 
 let adminScreeningsGeneration = 0;
+let adminScreeningsDataVersion = 0;
+const inFlightDateRequests = new Map<string, Promise<Screening[]>>();
+const inFlightMovieRequests = new Map<number, Promise<Screening[]>>();
+const dateRequestIds = new Map<string, number>();
+const movieRequestIds = new Map<number, number>();
 
 export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) => ({
   screeningsById: {},
   screeningIdsByDate: {},
   screeningIdsByMovieId: {},
   isLoadingByDate: {},
+  isRefreshingByDate: {},
   isLoadingByMovieId: {},
+  isRefreshingByMovieId: {},
   dateErrors: {},
   movieErrors: {},
   isCreatingScreening: false,
@@ -152,45 +156,79 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
         .filter((screening): screening is Screening => Boolean(screening));
     }
 
+    const existingRequest = inFlightDateRequests.get(dateKey);
+    if (existingRequest) return existingRequest;
+
     const generation = adminScreeningsGeneration;
+    const dataVersion = adminScreeningsDataVersion;
+    const requestId = (dateRequestIds.get(dateKey) ?? 0) + 1;
+    dateRequestIds.set(dateKey, requestId);
+    const hasCachedScreenings = Object.prototype.hasOwnProperty.call(
+      get().screeningIdsByDate,
+      dateKey
+    );
     set({
-      isLoadingByDate: { ...get().isLoadingByDate, [dateKey]: true },
+      isLoadingByDate: { ...get().isLoadingByDate, [dateKey]: !hasCachedScreenings },
+      isRefreshingByDate: { ...get().isRefreshingByDate, [dateKey]: hasCachedScreenings },
       dateErrors: { ...get().dateErrors, [dateKey]: null },
     });
 
-    try {
-      const response = await getScreeningsByDate(dateKey);
-      if (generation !== adminScreeningsGeneration) return [];
+    let request: Promise<Screening[]> | null = null;
+    request = (async () => {
+      try {
+        const response = await getScreeningsByDate(dateKey);
+        if (
+          generation !== adminScreeningsGeneration ||
+          dataVersion !== adminScreeningsDataVersion ||
+          dateRequestIds.get(dateKey) !== requestId
+        ) return [];
 
-      // The date query is authoritative for its date. Never display a
-      // response item that the backend returned with a different date key.
-      const screenings = response.filter((screening) => getDateKey(screening.date) === dateKey);
-      const normalized = replaceDate(get(), dateKey, screenings);
-      set({ ...normalized, dateErrors: { ...get().dateErrors, [dateKey]: null } });
-      return screenings.slice().sort(compareScreenings);
-    } catch (error: any) {
-      if (generation !== adminScreeningsGeneration) return [];
-
-      // The existing programme API behavior uses 404 for a date with no
-      // screenings. Other client/server errors remain visible to the admin.
-      if (error?.response?.status === 404) {
-        const normalized = replaceDate(get(), dateKey, []);
+        // Never display a response item that the backend returned with a
+        // different date key.
+        const screenings = response.filter((screening) => getDateKey(screening.date) === dateKey);
+        const normalized = replaceDate(get(), dateKey, screenings);
         set({ ...normalized, dateErrors: { ...get().dateErrors, [dateKey]: null } });
-        return [];
-      }
+        return screenings.slice().sort(compareScreenings);
+      } catch (error: unknown) {
+        if (
+          generation !== adminScreeningsGeneration ||
+          dataVersion !== adminScreeningsDataVersion ||
+          dateRequestIds.get(dateKey) !== requestId
+        ) return [];
 
-      set({
-        dateErrors: {
-          ...get().dateErrors,
-          [dateKey]: getErrorMessage(error, 'Impossible de charger le programme.'),
-        },
-      });
-      return [];
-    } finally {
-      if (generation === adminScreeningsGeneration) {
-        set({ isLoadingByDate: { ...get().isLoadingByDate, [dateKey]: false } });
+        // A 404 means there are no screenings only when no cached result
+        // exists. Refresh failures never discard an existing cached result.
+        if (getApiErrorDetails(error).status === 404 && !hasCachedScreenings) {
+          const normalized = replaceDate(get(), dateKey, []);
+          set({ ...normalized, dateErrors: { ...get().dateErrors, [dateKey]: null } });
+          return [];
+        }
+
+        set({
+          dateErrors: {
+            ...get().dateErrors,
+            [dateKey]: getApiErrorMessage(error, 'Impossible de charger le programme.'),
+          },
+        });
+        return [];
+      } finally {
+        if (
+          generation === adminScreeningsGeneration &&
+          dataVersion === adminScreeningsDataVersion &&
+          dateRequestIds.get(dateKey) === requestId
+        ) {
+          set({
+            isLoadingByDate: { ...get().isLoadingByDate, [dateKey]: false },
+            isRefreshingByDate: { ...get().isRefreshingByDate, [dateKey]: false },
+          });
+        }
+        if (inFlightDateRequests.get(dateKey) === request) inFlightDateRequests.delete(dateKey);
       }
-    }
+    })();
+
+    const startedRequest = request as Promise<Screening[]>;
+    inFlightDateRequests.set(dateKey, startedRequest);
+    return startedRequest;
   },
 
   refreshScreeningsByDate: async (date) => get().fetchScreeningsByDate(date, { force: true }),
@@ -202,44 +240,83 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
         .filter((screening): screening is Screening => Boolean(screening));
     }
 
+    const existingRequest = inFlightMovieRequests.get(movieId);
+    if (existingRequest) return existingRequest;
+
     const generation = adminScreeningsGeneration;
+    const dataVersion = adminScreeningsDataVersion;
+    const requestId = (movieRequestIds.get(movieId) ?? 0) + 1;
+    movieRequestIds.set(movieId, requestId);
+    const hasCachedScreenings = Object.prototype.hasOwnProperty.call(
+      get().screeningIdsByMovieId,
+      movieId
+    );
     set({
-      isLoadingByMovieId: { ...get().isLoadingByMovieId, [movieId]: true },
+      isLoadingByMovieId: { ...get().isLoadingByMovieId, [movieId]: !hasCachedScreenings },
+      isRefreshingByMovieId: { ...get().isRefreshingByMovieId, [movieId]: hasCachedScreenings },
       movieErrors: { ...get().movieErrors, [movieId]: null },
     });
 
-    try {
-      const screenings = await getScreeningsByMovieId(movieId);
-      if (generation !== adminScreeningsGeneration) return [];
-      const normalized = replaceMovie(get(), movieId, screenings);
-      set({ ...normalized, movieErrors: { ...get().movieErrors, [movieId]: null } });
-      return screenings.slice().sort(compareScreenings);
-    } catch (error: any) {
-      if (generation !== adminScreeningsGeneration) return [];
-      set({
-        movieErrors: {
-          ...get().movieErrors,
-          [movieId]: getErrorMessage(error, 'Impossible de charger les séances.'),
-        },
-      });
-      return [];
-    } finally {
-      if (generation === adminScreeningsGeneration) {
-        set({ isLoadingByMovieId: { ...get().isLoadingByMovieId, [movieId]: false } });
+    let request: Promise<Screening[]> | null = null;
+    request = (async () => {
+      try {
+        const screenings = await getScreeningsByMovieId(movieId);
+        if (
+          generation !== adminScreeningsGeneration ||
+          dataVersion !== adminScreeningsDataVersion ||
+          movieRequestIds.get(movieId) !== requestId
+        ) return [];
+        const normalized = replaceMovie(get(), movieId, screenings);
+        set({ ...normalized, movieErrors: { ...get().movieErrors, [movieId]: null } });
+        return screenings.slice().sort(compareScreenings);
+      } catch (error: unknown) {
+        if (
+          generation !== adminScreeningsGeneration ||
+          dataVersion !== adminScreeningsDataVersion ||
+          movieRequestIds.get(movieId) !== requestId
+        ) return [];
+        set({
+          movieErrors: {
+            ...get().movieErrors,
+            [movieId]: getApiErrorMessage(error, 'Impossible de charger les séances.'),
+          },
+        });
+        return [];
+      } finally {
+        if (
+          generation === adminScreeningsGeneration &&
+          dataVersion === adminScreeningsDataVersion &&
+          movieRequestIds.get(movieId) === requestId
+        ) {
+          set({
+            isLoadingByMovieId: { ...get().isLoadingByMovieId, [movieId]: false },
+            isRefreshingByMovieId: { ...get().isRefreshingByMovieId, [movieId]: false },
+          });
+        }
+        if (inFlightMovieRequests.get(movieId) === request) inFlightMovieRequests.delete(movieId);
       }
-    }
+    })();
+
+    const startedRequest = request as Promise<Screening[]>;
+    inFlightMovieRequests.set(movieId, startedRequest);
+    return startedRequest;
   },
 
   refreshScreeningsByMovieId: async (movieId) =>
     get().fetchScreeningsByMovieId(movieId, { force: true }),
 
   createScreening: async (payload) => {
+    if (get().isCreatingScreening) return null;
     const generation = adminScreeningsGeneration;
+    adminScreeningsDataVersion += 1;
+    inFlightDateRequests.clear();
+    inFlightMovieRequests.clear();
     set({ isCreatingScreening: true, createScreeningError: null, lastCreatedScreening: null });
 
     try {
       const screening = await createScreeningRequest(payload);
       if (generation !== adminScreeningsGeneration) return null;
+      adminScreeningsDataVersion += 1;
       const normalized = cloneNormalized(get());
       attachScreening(normalized, screening);
       normalized.screeningIdsByDate[getDateKey(screening.date)] = (
@@ -250,10 +327,10 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
       ).sort((a, b) => compareScreenings(normalized.screeningsById[a], normalized.screeningsById[b]));
       set({ ...normalized, createScreeningError: null, lastCreatedScreening: screening });
       return screening;
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (generation !== adminScreeningsGeneration) return null;
       set({
-        createScreeningError: getErrorMessage(error, 'Impossible de créer la séance.'),
+        createScreeningError: getApiErrorMessage(error, 'Impossible de créer la séance.'),
       });
       throw error;
     } finally {
@@ -265,17 +342,29 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
 
   invalidateDate: (date) => {
     const dateKey = getDateKey(date);
+    adminScreeningsDataVersion += 1;
+    dateRequestIds.set(dateKey, (dateRequestIds.get(dateKey) ?? 0) + 1);
+    inFlightDateRequests.delete(dateKey);
+    inFlightMovieRequests.clear();
     const normalized = replaceDate(get(), dateKey, []);
     set({
       ...normalized,
+      isLoadingByDate: { ...get().isLoadingByDate, [dateKey]: false },
+      isRefreshingByDate: { ...get().isRefreshingByDate, [dateKey]: false },
       dateErrors: { ...get().dateErrors, [dateKey]: null },
     });
   },
 
   invalidateMovie: (movieId) => {
+    adminScreeningsDataVersion += 1;
+    movieRequestIds.set(movieId, (movieRequestIds.get(movieId) ?? 0) + 1);
+    inFlightMovieRequests.delete(movieId);
+    inFlightDateRequests.clear();
     const normalized = replaceMovie(get(), movieId, []);
     set({
       ...normalized,
+      isLoadingByMovieId: { ...get().isLoadingByMovieId, [movieId]: false },
+      isRefreshingByMovieId: { ...get().isRefreshingByMovieId, [movieId]: false },
       movieErrors: { ...get().movieErrors, [movieId]: null },
     });
   },
@@ -284,12 +373,19 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
 
   clearScreenings: () => {
     adminScreeningsGeneration += 1;
+    adminScreeningsDataVersion += 1;
+    inFlightDateRequests.clear();
+    inFlightMovieRequests.clear();
+    dateRequestIds.clear();
+    movieRequestIds.clear();
     set({
       screeningsById: {},
       screeningIdsByDate: {},
       screeningIdsByMovieId: {},
       isLoadingByDate: {},
+      isRefreshingByDate: {},
       isLoadingByMovieId: {},
+      isRefreshingByMovieId: {},
       dateErrors: {},
       movieErrors: {},
       isCreatingScreening: false,
@@ -300,12 +396,19 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
 
   reset: () => {
     adminScreeningsGeneration += 1;
+    adminScreeningsDataVersion += 1;
+    inFlightDateRequests.clear();
+    inFlightMovieRequests.clear();
+    dateRequestIds.clear();
+    movieRequestIds.clear();
     set({
       screeningsById: {},
       screeningIdsByDate: {},
       screeningIdsByMovieId: {},
       isLoadingByDate: {},
+      isRefreshingByDate: {},
       isLoadingByMovieId: {},
+      isRefreshingByMovieId: {},
       dateErrors: {},
       movieErrors: {},
       isCreatingScreening: false,
@@ -314,12 +417,3 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
     });
   },
 }));
-
-let knownAdminIdentity = `${useAuthStore.getState().user?.id ?? 'none'}:${useAuthStore.getState().user?.role ?? 'none'}`;
-useAuthStore.subscribe((state) => {
-  const nextIdentity = `${state.user?.id ?? 'none'}:${state.user?.role ?? 'none'}`;
-  if (nextIdentity !== knownAdminIdentity) {
-    knownAdminIdentity = nextIdentity;
-    useAdminScreeningsStore.getState().reset();
-  }
-});

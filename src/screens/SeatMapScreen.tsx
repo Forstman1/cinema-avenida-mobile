@@ -15,6 +15,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+import { getApiErrorDetails, getApiErrorMessage } from '../api/errors';
 import ErrorState from '../components/ErrorState';
 import { useReservationStore } from '../store/reservationStore';
 import type { Seat, SeatCategory, SeatStatus } from '../types';
@@ -179,20 +180,21 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
         reservation,
         seats: selectedSeats,
       });
-    } catch (err: any) {
-      if (err.response?.status === 409) {
-        const errorData = err.response.data ?? {};
+    } catch (error: unknown) {
+      const details = getApiErrorDetails(error);
+      if (details.status === 409) {
+        const errorData = details.body;
 
         // Case 1: user already has an active pending reservation.
-        if (errorData.pendingReservationId) {
+        if (errorData?.pendingReservationId) {
           Alert.alert(
             'Réservation en cours',
-            errorData.message ?? 'Vous avez déjà une réservation en cours.',
+            details.message || 'Vous avez déjà une réservation en cours.',
             [
               { text: 'OK' },
               {
                 text: 'Voir ma réservation en cours',
-                onPress: () => navigation.navigate('Main', { screen: 'Mes Billets' } as never),
+                onPress: () => navigation.navigate('Main', { screen: 'Mes Billets' }),
               },
             ]
           );
@@ -200,7 +202,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
         }
 
         // Case 2: some selected seats were taken by someone else.
-        const unavailable: { id: number }[] = errorData.seats ?? [];
+        const unavailable = errorData?.seats ?? [];
         const unavailableIds = unavailable.map((s) => s.id);
         deselectSeats(unavailableIds);
         await fetchSeats(false);
@@ -214,14 +216,14 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
       } else {
         Alert.alert(
           'Erreur',
-          err.response?.data?.message ?? err?.message ?? reservationError ?? 'Impossible de verrouiller les sièges.'
+          getApiErrorMessage(error, reservationError ?? 'Impossible de verrouiller les sièges.')
         );
       }
     }
   };
 
   const renderSeat = (seat: Seat) => {
-    const isSelected = selectedIds.has(seat.id);
+    const isSelected = seat.status === 'LIBRE' && selectedIds.has(seat.id);
     const tappable = !hasPendingReservation && isSeatTappable(seat.status);
     const category = seat.category;
     const config = CATEGORY_CONFIG[category];

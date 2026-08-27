@@ -1,12 +1,19 @@
 import apiClient from './client';
-import type { Reservation } from '../types';
+import { request } from './errors';
+import { normalizeReservation } from './normalizers';
+import type {
+  CancelReservationResponse,
+  CancelReservationRequest,
+  GetMyReservationsResponse,
+} from '../types';
 
-export async function getMyReservations(): Promise<Reservation[]> {
-  const response = await apiClient.get<Reservation[]>('/reservations/me');
-  return response.data;
+export async function getMyReservations(): Promise<GetMyReservationsResponse> {
+  const reservations = await request(apiClient.get<GetMyReservationsResponse>('/reservations/me'));
+  return reservations.map(normalizeReservation);
 }
 
-export async function cancelReservation(reservationId: number): Promise<{ message: string }> {
-  const response = await apiClient.delete<{ message: string }>(`/reservations/${reservationId}`);
-  return response.data;
+export async function cancelReservation(
+  reservationId: CancelReservationRequest
+): Promise<CancelReservationResponse> {
+  return request(apiClient.delete<CancelReservationResponse>(`/reservations/${reservationId}`));
 }

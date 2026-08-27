@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
 import { loginRequest, signupRequest } from '../api/auth';
+import { getApiErrorDetails, getApiErrorMessage } from '../api/errors';
 import type { AuthResult, User } from '../types';
 
 export const AUTH_TOKEN_STORAGE_KEY = 'token';
@@ -19,28 +20,7 @@ export interface AuthStore {
 }
 
 let hydrationPromise: Promise<void> | null = null;
-
-function getApiErrorMessage(error: any, defaultMessage: string): string {
-  if (error.response) {
-    const status = error.response.status;
-    const backendMessage = error.response.data?.message || error.response.data?.error;
-
-    if (status === 400) {
-      return backendMessage ?? 'Veuillez remplir tous les champs.';
-    }
-    if (status === 401) {
-      return 'Email ou mot de passe incorrect.';
-    }
-    if (status === 409) {
-      return 'Cet email est déjà utilisé.';
-    }
-    return backendMessage ?? defaultMessage;
-  }
-  if (error.request) {
-    return 'Impossible de joindre le serveur. Vérifiez l\'adresse IP ou votre connexion.';
-  }
-  return error.message ?? defaultMessage;
-}
+let authOperationVersion = 0;
 
 function isStoredUser(value: unknown): value is User {
   if (!value || typeof value !== 'object') {
@@ -53,9 +33,16 @@ function isStoredUser(value: unknown): value is User {
     Number.isFinite(candidate.id) &&
     typeof candidate.name === 'string' &&
     typeof candidate.email === 'string' &&
-    typeof candidate.role === 'string' &&
-    candidate.role.length > 0
+    (candidate.role === 'CLIENT' || candidate.role === 'ADMIN')
   );
+}
+
+function getAuthErrorMessage(error: unknown, defaultMessage: string): string {
+  const details = getApiErrorDetails(error);
+  if (details.status === 400) return details.message || 'Veuillez remplir tous les champs.';
+  if (details.status === 401) return 'Email ou mot de passe incorrect.';
+  if (details.status === 409) return 'Cet email est déjà utilisé.';
+  return getApiErrorMessage(error, defaultMessage);
 }
 
 async function persistSession(token: string, user: User): Promise<void> {
@@ -83,6 +70,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       return hydrationPromise;
     }
 
+    const operationVersion = authOperationVersion;
     hydrationPromise = (async () => {
       try {
         const [[, storedToken], [, storedUser]] = await AsyncStorage.multiGet([
@@ -102,17 +90,23 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         // A session is restored only when both entries are present and the
         // complete user, including role, is valid. This avoids reviving a
         // stale user object without the role needed by admin navigation.
+        if (operationVersion !== authOperationVersion) return;
+
         if (storedToken && isStoredUser(parsedUser)) {
           set({ token: storedToken, user: parsedUser });
         } else {
           await clearPersistedSession();
           set({ token: null, user: null });
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Failed to restore auth state:', error);
-        set({ token: null, user: null });
+        if (operationVersion === authOperationVersion) {
+          set({ token: null, user: null });
+        }
       } finally {
-        set({ loading: false, hydrated: true });
+        if (operationVersion === authOperationVersion) {
+          set({ loading: false, hydrated: true });
+        }
       }
     })();
 
@@ -124,8 +118,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   login: async (email, password) => {
+    const operationVersion = ++authOperationVersion;
     try {
-      const { token, user } = await loginRequest(email, password);
+      const { token, user } = await loginRequest({ email, password });
 
       if (!token || !isStoredUser(user)) {
         return {
@@ -135,35 +130,42 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       }
 
       await persistSession(token, user);
+      if (operationVersion !== authOperationVersion) {
+        await clearPersistedSession();
+        return { success: false, message: 'La session a été réinitialisée.' };
+      }
       set({ token, user, loading: false, hydrated: true });
       return { success: true };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        message: getApiErrorMessage(error, 'Échec de la connexion.'),
+        message: getAuthErrorMessage(error, 'Échec de la connexion.'),
       };
     }
   },
 
   signup: async (name, email, password) => {
     try {
-      await signupRequest(name, email, password);
+      await signupRequest({ name, email, password });
       return { success: true };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        message: getApiErrorMessage(error, 'Échec de l\'inscription.'),
+        message: getAuthErrorMessage(error, 'Échec de l\'inscription.'),
       };
     }
   },
 
   logout: async () => {
+    // Change auth state first so the centralized lifecycle reset runs even if
+    // storage cleanup is slow or fails.
+    authOperationVersion += 1;
+    set({ token: null, user: null, loading: false, hydrated: true });
+
     try {
       await clearPersistedSession();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Logout error:', error);
     }
-
-    set({ token: null, user: null, loading: false, hydrated: true });
   },
 }));

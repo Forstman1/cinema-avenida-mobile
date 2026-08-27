@@ -1,7 +1,7 @@
 import apiClient from './client';
-import type { AdminDashboard } from '../types';
+import { request } from './errors';
+import type { GetAdminDashboardResponse } from '../types';
 
-export async function getAdminDashboard(): Promise<AdminDashboard> {
-  const response = await apiClient.get<AdminDashboard>('/admin/dashboard');
-  return response.data;
+export async function getAdminDashboard(): Promise<GetAdminDashboardResponse> {
+  return request(apiClient.get<GetAdminDashboardResponse>('/admin/dashboard'));
 }

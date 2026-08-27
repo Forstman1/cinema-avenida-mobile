@@ -1,61 +1,71 @@
 import apiClient from './client';
-import type { Movie, Screening } from '../types';
+import { request } from './errors';
+import { normalizeMovie, normalizeScreening } from './normalizers';
+import type {
+  CreateMovieRequest,
+  CreateMovieResponse,
+  CreateScreeningRequest,
+  CreateScreeningResponse,
+  GetMovieByIdRequest,
+  GetMovieByIdResponse,
+  GetMoviesRequest,
+  GetMoviesResponse,
+  GetScreeningsByDateRequest,
+  GetScreeningsByDateResponse,
+  GetScreeningsByMovieIdRequest,
+  GetScreeningsByMovieIdResponse,
+  UpdateMovieRequest,
+  UpdateMovieResponse,
+} from '../types';
 
-function preservePoster(movie: Movie): Movie {
-  const poster = typeof movie.poster === 'string' ? movie.poster.trim() : null;
-  return { ...movie, poster: poster || null };
+export async function getMovies(params?: GetMoviesRequest): Promise<GetMoviesResponse> {
+  const movies = await request(apiClient.get<GetMoviesResponse>('/movies', { params }));
+  return movies.map(normalizeMovie);
 }
 
-export async function getMovies(params?: { current?: boolean }): Promise<Movie[]> {
-  const response = await apiClient.get<Movie[]>('/movies', { params });
-  return response.data.map(preservePoster);
+export async function getMovieById(id: GetMovieByIdRequest): Promise<GetMovieByIdResponse> {
+  const movie = await request(apiClient.get<GetMovieByIdResponse>(`/movies/${id}`));
+  return normalizeMovie(movie);
 }
 
-export async function getMovieById(id: number): Promise<Movie> {
-  const response = await apiClient.get<Movie>(`/movies/${id}`);
-  return preservePoster(response.data);
+export async function getScreeningsByMovieId(
+  id: GetScreeningsByMovieIdRequest
+): Promise<GetScreeningsByMovieIdResponse> {
+  const screenings = await request(
+    apiClient.get<GetScreeningsByMovieIdResponse>(`/movies/${id}/screenings`)
+  );
+  return screenings.map(normalizeScreening);
 }
 
-export async function getScreeningsByMovieId(id: number): Promise<Screening[]> {
-  const response = await apiClient.get<Screening[]>(`/movies/${id}/screenings`);
-  return response.data;
+export async function getRawMovieById(id: GetMovieByIdRequest): Promise<GetMovieByIdResponse> {
+  return getMovieById(id);
 }
 
-export interface MoviePayload {
-  title: string;
-  synopsis: string;
-  duration: number;
-  genre: string;
-  poster?: string;
+export async function createMovie(payload: CreateMovieRequest): Promise<CreateMovieResponse> {
+  const movie = await request(apiClient.post<CreateMovieResponse>('/movies', payload));
+  return normalizeMovie(movie);
 }
 
-export async function getRawMovieById(id: number): Promise<Movie> {
-  const response = await apiClient.get<Movie>(`/movies/${id}`);
-  return response.data;
+export async function updateMovie(
+  id: UpdateMovieRequest['id'],
+  payload: UpdateMovieRequest['payload']
+): Promise<UpdateMovieResponse> {
+  const movie = await request(apiClient.put<UpdateMovieResponse>(`/movies/${id}`, payload));
+  return normalizeMovie(movie);
 }
 
-export async function createMovie(payload: MoviePayload): Promise<Movie> {
-  const response = await apiClient.post<Movie>('/movies', payload);
-  return response.data;
+export async function createScreening(
+  payload: CreateScreeningRequest
+): Promise<CreateScreeningResponse> {
+  const screening = await request(apiClient.post<CreateScreeningResponse>('/screenings', payload));
+  return normalizeScreening(screening);
 }
 
-export async function updateMovie(id: number, payload: MoviePayload): Promise<Movie> {
-  const response = await apiClient.put<Movie>(`/movies/${id}`, payload);
-  return response.data;
-}
-
-export interface ScreeningPayload {
-  movieId: number;
-  date: string;
-  showTime: string;
-}
-
-export async function createScreening(payload: ScreeningPayload): Promise<Screening> {
-  const response = await apiClient.post<Screening>('/screenings', payload);
-  return response.data;
-}
-
-export async function getScreeningsByDate(date: string): Promise<Screening[]> {
-  const response = await apiClient.get<Screening[]>('/screenings', { params: { date } });
-  return response.data;
+export async function getScreeningsByDate(
+  date: GetScreeningsByDateRequest
+): Promise<GetScreeningsByDateResponse> {
+  const screenings = await request(
+    apiClient.get<GetScreeningsByDateResponse>('/screenings', { params: { date } })
+  );
+  return screenings.map(normalizeScreening);
 }

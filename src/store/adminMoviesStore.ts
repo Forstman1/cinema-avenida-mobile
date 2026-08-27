@@ -1,73 +1,92 @@
 import { create } from 'zustand';
+import { getApiErrorMessage } from '../api/errors';
 
 import {
   createMovie as createMovieRequest,
   getMovies,
   updateMovie as updateMovieRequest,
-  type MoviePayload,
 } from '../api/movies';
-import type { Movie } from '../types';
-import { useAuthStore } from './authStore';
+import type { Movie, MovieRequest } from '../types';
 
 export interface AdminMoviesStore {
   movies: Movie[];
   isLoadingMovies: boolean;
+  isRefreshingMovies: boolean;
   isSubmitting: boolean;
   moviesError: string | null;
   submissionError: string | null;
   lastSavedMovie: Movie | null;
   fetchMovies: () => Promise<void>;
-  createMovie: (payload: MoviePayload) => Promise<Movie | null>;
-  updateMovie: (movieId: number, payload: MoviePayload) => Promise<Movie | null>;
+  createMovie: (payload: MovieRequest) => Promise<Movie | null>;
+  updateMovie: (movieId: number, payload: MovieRequest) => Promise<Movie | null>;
   clearMovies: () => void;
   clearErrors: () => void;
   reset: () => void;
 }
 
-function getErrorMessage(error: any, fallback: string): string {
-  return error?.response?.data?.message ?? error?.message ?? fallback;
-}
-
 let adminMoviesGeneration = 0;
+let adminMoviesRequestId = 0;
+let inFlightAdminMoviesRequest: Promise<void> | null = null;
 
-export const useAdminMoviesStore = create<AdminMoviesStore>((set) => ({
+export const useAdminMoviesStore = create<AdminMoviesStore>((set, get) => ({
   movies: [],
   isLoadingMovies: false,
+  isRefreshingMovies: false,
   isSubmitting: false,
   moviesError: null,
   submissionError: null,
   lastSavedMovie: null,
 
   fetchMovies: async () => {
-    const generation = adminMoviesGeneration;
-    set({ isLoadingMovies: true, moviesError: null });
+    if (inFlightAdminMoviesRequest) return inFlightAdminMoviesRequest;
 
-    try {
-      const movies = await getMovies();
-      if (generation !== adminMoviesGeneration) return;
-      set({ movies, moviesError: null });
-    } catch (error: any) {
-      if (generation !== adminMoviesGeneration) return;
-      set({ moviesError: getErrorMessage(error, 'Impossible de charger les films.') });
-    } finally {
-      if (generation === adminMoviesGeneration) {
-        set({ isLoadingMovies: false });
+    const generation = adminMoviesGeneration;
+    const requestId = ++adminMoviesRequestId;
+    const hasCachedMovies = get().movies.length > 0;
+    set({
+      isLoadingMovies: !hasCachedMovies,
+      isRefreshingMovies: hasCachedMovies,
+      moviesError: null,
+    });
+
+    let request: Promise<void> | null = null;
+    request = (async () => {
+      try {
+        const movies = await getMovies();
+        if (generation !== adminMoviesGeneration || requestId !== adminMoviesRequestId) return;
+        set({ movies, moviesError: null });
+      } catch (error: unknown) {
+        if (generation !== adminMoviesGeneration || requestId !== adminMoviesRequestId) return;
+        set({ moviesError: getApiErrorMessage(error, 'Impossible de charger les films.') });
+      } finally {
+        if (generation === adminMoviesGeneration && requestId === adminMoviesRequestId) {
+          set({ isLoadingMovies: false, isRefreshingMovies: false });
+        }
+        if (inFlightAdminMoviesRequest === request) inFlightAdminMoviesRequest = null;
       }
-    }
+    })();
+
+    const startedRequest = request as Promise<void>;
+    inFlightAdminMoviesRequest = startedRequest;
+    return startedRequest;
   },
 
   createMovie: async (payload) => {
+    if (get().isSubmitting) return null;
     const generation = adminMoviesGeneration;
+    adminMoviesRequestId += 1;
+    inFlightAdminMoviesRequest = null;
     set({ isSubmitting: true, submissionError: null, lastSavedMovie: null });
 
     try {
       const movie = await createMovieRequest(payload);
       if (generation !== adminMoviesGeneration) return null;
+      adminMoviesRequestId += 1;
       set({ lastSavedMovie: movie, submissionError: null });
       return movie;
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (generation !== adminMoviesGeneration) return null;
-      set({ submissionError: getErrorMessage(error, 'Impossible de créer le film.') });
+      set({ submissionError: getApiErrorMessage(error, 'Impossible de créer le film.') });
       throw error;
     } finally {
       if (generation === adminMoviesGeneration) {
@@ -77,17 +96,21 @@ export const useAdminMoviesStore = create<AdminMoviesStore>((set) => ({
   },
 
   updateMovie: async (movieId, payload) => {
+    if (get().isSubmitting) return null;
     const generation = adminMoviesGeneration;
+    adminMoviesRequestId += 1;
+    inFlightAdminMoviesRequest = null;
     set({ isSubmitting: true, submissionError: null, lastSavedMovie: null });
 
     try {
       const movie = await updateMovieRequest(movieId, payload);
       if (generation !== adminMoviesGeneration) return null;
+      adminMoviesRequestId += 1;
       set({ lastSavedMovie: movie, submissionError: null });
       return movie;
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (generation !== adminMoviesGeneration) return null;
-      set({ submissionError: getErrorMessage(error, 'Impossible de mettre à jour le film.') });
+      set({ submissionError: getApiErrorMessage(error, 'Impossible de mettre à jour le film.') });
       throw error;
     } finally {
       if (generation === adminMoviesGeneration) {
@@ -98,7 +121,14 @@ export const useAdminMoviesStore = create<AdminMoviesStore>((set) => ({
 
   clearMovies: () => {
     adminMoviesGeneration += 1;
-    set({ movies: [], lastSavedMovie: null });
+    adminMoviesRequestId += 1;
+    inFlightAdminMoviesRequest = null;
+    set({
+      movies: [],
+      lastSavedMovie: null,
+      isLoadingMovies: false,
+      isRefreshingMovies: false,
+    });
   },
 
   clearErrors: () => {
@@ -107,9 +137,12 @@ export const useAdminMoviesStore = create<AdminMoviesStore>((set) => ({
 
   reset: () => {
     adminMoviesGeneration += 1;
+    adminMoviesRequestId += 1;
+    inFlightAdminMoviesRequest = null;
     set({
       movies: [],
       isLoadingMovies: false,
+      isRefreshingMovies: false,
       isSubmitting: false,
       moviesError: null,
       submissionError: null,
@@ -117,14 +150,3 @@ export const useAdminMoviesStore = create<AdminMoviesStore>((set) => ({
     });
   },
 }));
-
-// The admin catalogue is not persisted and must not survive an account or
-// role change. Catalogue data used by customers remains in moviesStore.
-let knownAdminIdentity = `${useAuthStore.getState().user?.id ?? 'none'}:${useAuthStore.getState().user?.role ?? 'none'}`;
-useAuthStore.subscribe((state) => {
-  const nextIdentity = `${state.user?.id ?? 'none'}:${state.user?.role ?? 'none'}`;
-  if (nextIdentity !== knownAdminIdentity) {
-    knownAdminIdentity = nextIdentity;
-    useAdminMoviesStore.getState().reset();
-  }
-});

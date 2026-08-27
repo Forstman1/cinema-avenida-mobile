@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+import { getApiErrorDetails, getApiErrorMessage } from '../api/errors';
 import { useAuthStore } from '../store/authStore';
 import { useBookingsStore } from '../store/bookingsStore';
 import { useReservationStore } from '../store/reservationStore';
@@ -238,9 +239,10 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
       // clearing only the temporary selection and lock after the bookings
       // store has received the completed booking.
       clearReservationDraft();
-    } catch (err: any) {
-      const message = err?.response?.data?.message ?? 'Le paiement a échoué.';
-      const isExpiredError = err?.response?.status === 410 || err?.response?.status === 409 || /expir/i.test(message);
+    } catch (error: unknown) {
+      const message = getApiErrorMessage(error, 'Le paiement a échoué.');
+      const status = getApiErrorDetails(error).status;
+      const isExpiredError = (status === 410 || status === 409) || /expir/i.test(message);
       Alert.alert('Erreur de paiement', message, [
         {
           text: isExpiredError ? 'Choisir des sièges' : 'OK',

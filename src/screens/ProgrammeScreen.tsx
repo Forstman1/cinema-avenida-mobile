@@ -16,13 +16,14 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 
+import { getApiErrorDetails, getApiErrorMessage } from '../api/errors';
 import ErrorState from '../components/ErrorState';
 import PosterImage from '../components/PosterImage';
 import { useAdminMoviesStore } from '../store/adminMoviesStore';
 import { useAdminScreeningsStore } from '../store/adminScreeningsStore';
 import type { Movie, Screening } from '../types';
 import type { ProgrammeScreenProps } from '../types/navigation';
-import { compareShowTimes, toISODate } from '../utils/date';
+import { compareShowTimes, toHHMM, toISODate, toISODateString } from '../utils/date';
 
 const TIME_SLOTS = ['18:00', '20:30', '22:30'];
 const WEEKDAY_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
@@ -30,13 +31,6 @@ const MONTH_NAMES = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
 ];
-
-function toISODateString(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 function getStartOfWeek(date: Date): Date {
   const d = new Date(date);
@@ -156,14 +150,14 @@ export default function ProgrammeScreen() {
     try {
       const createdScreening = await createAdminScreening({
         movieId: movie.id,
-        date: selectedDateString,
-        showTime: pendingSlot,
+        date: toISODate(selectedDateString),
+        showTime: toHHMM(pendingSlot),
       });
       if (!createdScreening) return;
       closeModal();
       await fetchSchedule();
-    } catch (err: any) {
-      if (err?.response?.status === 409) {
+    } catch (error: unknown) {
+      if (getApiErrorDetails(error).status === 409) {
         closeModal();
         Alert.alert(
           'Créneau occupé',
@@ -173,7 +167,7 @@ export default function ProgrammeScreen() {
       } else {
         Alert.alert(
           'Erreur',
-          err?.response?.data?.message ?? createScreeningError ?? 'Impossible de créer la séance.'
+          getApiErrorMessage(error, createScreeningError ?? 'Impossible de créer la séance.')
         );
       }
     }

@@ -16,7 +16,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import ErrorState from '../components/ErrorState';
-import type { Screening } from '../types';
+import type { ISODateString, Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { ScreeningsScreenProps } from '../types/navigation';
 import {
@@ -60,7 +60,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
     [weekDays]
   );
 
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<ISODateString | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const screenings = useMoviesStore(
     (state) => state.screeningsByMovieId[movie.id] ?? EMPTY_SCREENINGS
@@ -141,7 +141,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
     );
   }, [daysWithScreenings, loading, normalizedInitialDate, today]);
 
-  const handleDayPress = useCallback((dateString: string) => {
+  const handleDayPress = useCallback((dateString: ISODateString) => {
     setSelectedDate(dateString);
     setSelectedId(null);
   }, []);

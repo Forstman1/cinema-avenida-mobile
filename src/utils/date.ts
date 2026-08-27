@@ -1,4 +1,4 @@
-import type { Reservation, Screening } from '../types';
+import type { ISODateString, Reservation, Screening, TimeString } from '../types';
 
 const WEEKDAYS = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'];
 const MONTHS = ['Jan.', 'Fév.', 'Mar.', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'];
@@ -42,16 +42,21 @@ export function formatScreeningDate(dateString: string): string {
   return `${dayName} ${dayNumber} ${month}`;
 }
 
-export function getTodayDateString(): string {
+export function getTodayDateString(): ISODateString {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return `${year}-${month}-${day}` as ISODateString;
 }
 
-export function toISODate(dateString: string): string {
-  return dateString.split('T')[0];
+export function toISODate(dateString: string): ISODateString {
+  return dateString.split('T')[0] as ISODateString;
+}
+
+export function toHHMM(timeString: string): TimeString {
+  const [hours = '00', minutes = '00'] = timeString.split(':');
+  return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}` as TimeString;
 }
 
 /** Parse an API calendar date without allowing the runtime to apply a UTC offset. */
@@ -79,8 +84,8 @@ export function isScreeningInFuture(screening: Screening, now = new Date()): boo
   return Boolean(screeningDateTime && screeningDateTime.getTime() >= now.getTime());
 }
 
-export function formatDuration(minutesValue: string | number): string {
-  const total = typeof minutesValue === 'string' ? parseInt(minutesValue, 10) : minutesValue;
+export function formatDuration(minutesValue: number): string {
+  const total = minutesValue;
   if (Number.isNaN(total)) return String(minutesValue);
 
   const hours = Math.floor(total / 60);
@@ -122,11 +127,11 @@ export function getNextScreening(screenings: Screening[]): Screening | null {
   return [...upcoming].sort(compareScreeningsByDateTime)[0] ?? null;
 }
 
-export function toISODateString(date: Date): string {
+export function toISODateString(date: Date): ISODateString {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return `${year}-${month}-${day}` as ISODateString;
 }
 
 export function getRemainingDaysOfWeek(fromDate = new Date()): Date[] {

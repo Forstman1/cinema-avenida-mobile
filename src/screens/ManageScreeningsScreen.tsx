@@ -14,9 +14,10 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 
+import { getApiErrorMessage } from '../api/errors';
 import ErrorState from '../components/ErrorState';
 import { useAdminScreeningsStore } from '../store/adminScreeningsStore';
-import { compareShowTimes, parseLocalDate, toISODate, toISODateString } from '../utils/date';
+import { compareShowTimes, parseLocalDate, toHHMM, toISODate, toISODateString } from '../utils/date';
 import type { Movie, Screening } from '../types';
 import type { ManageScreeningsScreenProps } from '../types/navigation';
 
@@ -55,7 +56,7 @@ export default function ManageScreeningsScreen({
   const isCreatingScreening = useAdminScreeningsStore((state) => state.isCreatingScreening);
   const createScreeningError = useAdminScreeningsStore((state) => state.createScreeningError);
 
-  const [date, setDate] = useState(toISODateString(new Date()));
+  const [date, setDate] = useState<string>(toISODateString(new Date()));
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const screenings = useMemo(
     () => screeningIds
@@ -105,17 +106,17 @@ export default function ManageScreeningsScreen({
     try {
       const createdScreening = await createAdminScreening({
         movieId: movie.id,
-        date: date.trim(),
-        showTime: selectedSlot,
+        date: toISODate(date.trim()),
+        showTime: toHHMM(selectedSlot),
       });
       if (!createdScreening) return;
       setSelectedSlot(null);
       setDate(toISODateString(new Date()));
       await fetchScreenings();
-    } catch (err: any) {
+    } catch (error: unknown) {
       Alert.alert(
         'Erreur',
-        err?.response?.data?.message ?? createScreeningError ?? 'Impossible de créer la séance.'
+        getApiErrorMessage(error, createScreeningError ?? 'Impossible de créer la séance.')
       );
     }
   };
