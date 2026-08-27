@@ -1,5 +1,6 @@
 import React, { useEffect, type ReactNode } from 'react';
 import { useAuthStore, type AuthStore } from '../store/authStore';
+import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 import '../store/authLifecycle';
 
 interface AuthProviderProps {
@@ -8,10 +9,15 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const hydrate = useAuthStore((state) => state.hydrate);
+  const fetchConfig = useCinemaConfigStore((state) => state.fetchConfig);
 
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    void fetchConfig();
+  }, [fetchConfig]);
 
   return <>{children}</>;
 }

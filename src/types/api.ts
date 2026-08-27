@@ -15,6 +15,11 @@ export interface User {
   role: UserRole;
 }
 
+export interface MovieSummary {
+  id: number;
+  title: string;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -42,6 +47,13 @@ export interface AuthResult {
   message?: string;
 }
 
+export interface CinemaConfig {
+  capacity: number;
+  timezone: string;
+  screeningSlots: TimeString[];
+  seatCategories: Record<SeatCategory, number>;
+}
+
 export interface Movie {
   id: number;
   title: string;
@@ -52,6 +64,8 @@ export interface Movie {
   screenings?: Screening[];
 }
 
+export type MovieReference = Movie | MovieSummary;
+
 export interface Screening {
   id: number;
   date: ISODateString;
@@ -59,6 +73,16 @@ export interface Screening {
   movieId: number;
   availableSeats?: number;
 }
+
+export interface ReservationScreening {
+  id: number;
+  date: ISODateString;
+  showTime: TimeString;
+  movieId: number;
+  movie: MovieSummary;
+}
+
+export type ScreeningReference = Screening | ReservationScreening;
 
 export interface MovieRequest {
   title: string;
@@ -84,19 +108,22 @@ export interface Seat {
 
 export interface ReservationSeat {
   id: number;
+  lockedUntil: string | null;
+  reservationId: number;
   seatId: number;
   seat: Seat;
-  lockedUntil?: string;
 }
 
 export interface Reservation {
   id: number;
   totalAmount: number;
   status: ReservationStatus;
-  reservedAt?: string;
-  screening?: Screening & { movie: Movie };
-  reservationSeats?: ReservationSeat[];
-  ticket?: Ticket;
+  reservedAt: string;
+  userId: number;
+  screeningId: number;
+  screening: ReservationScreening;
+  reservationSeats: ReservationSeat[];
+  ticket: Ticket | null;
 }
 
 export interface Ticket {
@@ -192,5 +219,8 @@ export interface CancelReservationResponse {
   message: string;
 }
 export type PayReservationRequest = number;
-export type PayReservationResponse = Reservation & { ticket: Ticket };
+export type PayReservationApiResponse = Reservation;
+export type PaidReservation = Reservation & { ticket: Ticket };
+export type PayReservationResponse = PaidReservation;
 export type GetAdminDashboardResponse = AdminDashboard;
+export type GetCinemaConfigResponse = CinemaConfig;

@@ -21,11 +21,11 @@ import ErrorState from '../components/ErrorState';
 import PosterImage from '../components/PosterImage';
 import { useAdminMoviesStore } from '../store/adminMoviesStore';
 import { useAdminScreeningsStore } from '../store/adminScreeningsStore';
+import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 import type { Movie, Screening } from '../types';
 import type { ProgrammeScreenProps } from '../types/navigation';
 import { compareShowTimes, toHHMM, toISODate, toISODateString } from '../utils/date';
 
-const TIME_SLOTS = ['18:00', '20:30', '22:30'];
 const WEEKDAY_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const MONTH_NAMES = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
@@ -90,6 +90,12 @@ export default function ProgrammeScreen() {
   const clearCreateError = useAdminScreeningsStore((state) => state.clearCreateError);
   const [refreshing, setRefreshing] = useState(false);
 
+  const config = useCinemaConfigStore((state) => state.config);
+  const configLoading = useCinemaConfigStore((state) => state.isLoading);
+  const configError = useCinemaConfigStore((state) => state.error);
+  const fetchConfig = useCinemaConfigStore((state) => state.fetchConfig);
+  const configAvailable = Boolean(config && !configLoading && !configError);
+
   const movies = useAdminMoviesStore((state) => state.movies);
   const loadingMovies = useAdminMoviesStore((state) => state.isLoadingMovies);
   const fetchMovies = useAdminMoviesStore((state) => state.fetchMovies);
@@ -122,16 +128,17 @@ export default function ProgrammeScreen() {
   }, [fetchSchedule, fetchMovies]);
 
   const slots = useMemo(() => {
-    return TIME_SLOTS.map((time) => {
+    return (config?.screeningSlots ?? []).map((time) => {
       const screening = schedule.find((s) => s.showTime === time);
       const movie = screening
         ? movies.find((candidate) => candidate.id === screening.movieId)
         : undefined;
       return { time, screening, movie };
     });
-  }, [movies, schedule]);
+  }, [config, movies, schedule]);
 
   const openMoviePicker = async (slot: string) => {
+    if (!configAvailable) return;
     setPendingSlot(slot);
     setModalVisible(true);
     if (movies.length === 0) {
@@ -146,7 +153,7 @@ export default function ProgrammeScreen() {
   };
 
   const handleSelectMovie = async (movie: Movie) => {
-    if (!pendingSlot) return;
+    if (!pendingSlot || !configAvailable) return;
     try {
       const createdScreening = await createAdminScreening({
         movieId: movie.id,
@@ -274,7 +281,13 @@ export default function ProgrammeScreen() {
 
         <Text style={styles.dateTitle}>{formatFullDate(selectedDate)}</Text>
 
-        {scheduleError ? (
+        {configError ? (
+          <ErrorState message={configError} onRetry={() => { void fetchConfig(); }} />
+        ) : configLoading || !config ? (
+          <View style={styles.loader}>
+            <ActivityIndicator size="small" color="#b22222" />
+          </View>
+        ) : scheduleError ? (
           <ErrorState message={scheduleError} onRetry={fetchSchedule} />
         ) : (
           <>
@@ -312,6 +325,7 @@ export default function ProgrammeScreen() {
                         style={styles.addButton}
                         onPress={() => openMoviePicker(time)}
                         activeOpacity={0.8}
+                        disabled={!configAvailable}
                       >
                         <MaterialIcons name="add" size={18} color="#ffb4ac" />
                         <Text style={styles.addButtonText}>Ajouter</Text>
@@ -324,7 +338,7 @@ export default function ProgrammeScreen() {
           </>
         )}
 
-        {loadingSchedule && (
+        {loadingSchedule && configAvailable && (
           <View style={styles.loader}>
             <ActivityIndicator size="small" color="#b22222" />
           </View>
@@ -334,7 +348,7 @@ export default function ProgrammeScreen() {
       <Modal
         animationType="slide"
         transparent
-        visible={modalVisible}
+        visible={modalVisible && configAvailable}
         onRequestClose={closeModal}
         statusBarTranslucent
       >

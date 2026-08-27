@@ -16,12 +16,11 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 import { getApiErrorMessage } from '../api/errors';
 import ErrorState from '../components/ErrorState';
+import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 import { useAdminScreeningsStore } from '../store/adminScreeningsStore';
 import { compareShowTimes, parseLocalDate, toHHMM, toISODate, toISODateString } from '../utils/date';
 import type { Movie, Screening } from '../types';
 import type { ManageScreeningsScreenProps } from '../types/navigation';
-
-const TIME_SLOTS = ['18:00', '20:30', '22:30'];
 
 function groupScreeningsByDate(screenings: Screening[]): Record<string, Screening[]> {
   return screenings.reduce((acc, screening) => {
@@ -38,6 +37,11 @@ export default function ManageScreeningsScreen({
   const navigation = useNavigation<ManageScreeningsScreenProps['navigation']>();
   const insets = useSafeAreaInsets();
   const { movie } = route.params;
+  const config = useCinemaConfigStore((state) => state.config);
+  const configLoading = useCinemaConfigStore((state) => state.isLoading);
+  const configError = useCinemaConfigStore((state) => state.error);
+  const fetchConfig = useCinemaConfigStore((state) => state.fetchConfig);
+  const configAvailable = Boolean(config && !configLoading && !configError);
 
   const screeningIds = useAdminScreeningsStore(
     (state) => state.screeningIdsByMovieId[movie.id] ?? []
@@ -86,10 +90,13 @@ export default function ManageScreeningsScreen({
   );
 
   const isValidDate = Boolean(parseLocalDate(date.trim()));
-  const isValidTime = Boolean(selectedSlot && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(selectedSlot));
-  const canSubmit = Number.isInteger(movie.id) && movie.id > 0 && isValidDate && isValidTime;
+  const isValidTime = Boolean(
+    config && selectedSlot && config.screeningSlots.includes(toHHMM(selectedSlot))
+  );
+  const canSubmit = configAvailable && Number.isInteger(movie.id) && movie.id > 0 && isValidDate && isValidTime;
 
   const handleAdd = async () => {
+    if (!configAvailable) return;
     if (!Number.isInteger(movie.id) || movie.id <= 0) {
       Alert.alert('Champs invalides', 'L’identifiant du film est invalide.');
       return;
@@ -121,7 +128,23 @@ export default function ManageScreeningsScreen({
     }
   };
 
-  if (loading) {
+  if (configError) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+            <MaterialIcons name="arrow-back" size={24} color="#e5e2e1" />
+          </TouchableOpacity>
+          <Text style={styles.topBarTitle} numberOfLines={1}>Séances</Text>
+          <View style={styles.topBarSpacer} />
+        </View>
+        <ErrorState message={configError} onRetry={() => { void fetchConfig(); }} />
+      </SafeAreaView>
+    );
+  }
+
+  if (configLoading || !config || loading) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
@@ -187,7 +210,7 @@ export default function ManageScreeningsScreen({
         <View style={styles.field}>
           <Text style={styles.label}>Créneau</Text>
           <View style={styles.slots}>
-            {TIME_SLOTS.map((slot) => (
+            {(config?.screeningSlots ?? []).map((slot) => (
               <TouchableOpacity
                 key={slot}
                 style={[styles.slot, selectedSlot === slot && styles.slotSelected]}

@@ -20,7 +20,15 @@ import { useAuthStore } from '../store/authStore';
 import { useBookingsStore } from '../store/bookingsStore';
 import { useReservationStore } from '../store/reservationStore';
 import { parseLocalDate, toISODate } from '../utils/date';
-import type { Movie, Reservation, Screening, Seat } from '../types';
+import type {
+  Movie,
+  MovieReference,
+  MovieSummary,
+  Reservation,
+  ReservationScreening,
+  Screening,
+  Seat,
+} from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { PaymentScreenProps } from '../types/navigation';
 
@@ -67,36 +75,61 @@ function getReservationLockedUntil(reservation: Reservation | null): string | nu
   );
 }
 
+function isCompleteMovie(movie: MovieReference): movie is Movie {
+  return 'synopsis' in movie;
+}
+
+function toMovieSummary(movie: MovieReference): MovieSummary {
+  return { id: movie.id, title: movie.title };
+}
+
+function normalizeReservationScreeningForPayment(
+  source: ReservationScreening | Screening | undefined,
+  movie: MovieReference | undefined
+): ReservationScreening | undefined {
+  if (!source) return undefined;
+
+  const movieSummary = 'movie' in source
+    ? source.movie
+    : movie
+      ? toMovieSummary(movie)
+      : undefined;
+  if (!movieSummary) return undefined;
+
+  return {
+    id: source.id,
+    date: toISODate(source.date),
+    showTime: source.showTime,
+    movieId: source.movieId,
+    movie: toMovieSummary(movieSummary),
+  };
+}
+
 function normalizeReservation(
   source: Reservation | null | undefined,
-  movie: Movie | undefined,
+  movie: MovieReference | undefined,
   screening: Screening | undefined,
   seats: Seat[] | undefined
 ): Reservation | null {
   if (!source || !Number.isInteger(source.id)) return null;
 
   const baseScreening = source.screening ?? screening;
-  const normalizedScreening = baseScreening && movie
-    ? {
-        ...baseScreening,
-        date: toISODate(baseScreening.date),
-        movieId: baseScreening.movieId ?? movie.id,
-        movie: source.screening?.movie ?? movie,
-      }
-    : source.screening;
+  const normalizedScreening = normalizeReservationScreeningForPayment(baseScreening, movie);
 
-  const reservationSeats = source.reservationSeats?.length
+  const reservationSeats = source.reservationSeats.length > 0
     ? source.reservationSeats
     : (seats ?? []).map((seat) => ({
         id: seat.id,
         seatId: seat.id,
         seat,
+        reservationId: source.id,
+        lockedUntil: null,
       }));
 
   return {
     ...source,
-    ...(normalizedScreening ? { screening: normalizedScreening } : {}),
-    ...(reservationSeats.length > 0 ? { reservationSeats } : {}),
+    screening: normalizedScreening ?? source.screening,
+    reservationSeats,
   };
 }
 
@@ -168,7 +201,7 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
   }, [effectiveLockedUntil]);
 
   const handleReturnToSeats = useCallback(() => {
-    if (movie && screening) {
+    if (movie && isCompleteMovie(movie) && screening) {
       navigation.navigate('SeatMap', { movie, screening });
     } else {
       navigation.goBack();
@@ -218,6 +251,9 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
     }
     try {
       const result = await payReservation();
+      if (!result.ticket) {
+        throw new Error('Le paiement a réussi, mais aucun billet n’a été retourné.');
+      }
       if (movie && screening) {
         setLastCompletedBooking({
           userId,
@@ -318,8 +354,11 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
         {/* Booking summary */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryRow}>
-            {movie.poster ? (
-              <Image source={{ uri: movie.poster }} style={styles.posterThumbnail} />
+            {isCompleteMovie(movie) && movie.poster ? (
+              <Image
+                source={{ uri: movie.poster }}
+                style={styles.posterThumbnail}
+              />
             ) : (
               <View style={styles.posterPlaceholder}>
                 <Text style={styles.posterPlaceholderText}>Cinéma Avenida</Text>

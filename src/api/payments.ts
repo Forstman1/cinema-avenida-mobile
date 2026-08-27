@@ -1,7 +1,8 @@
 import apiClient from './client';
 import { request } from './errors';
-import { normalizeReservation } from './normalizers';
+import { isPaidReservation, normalizeReservation } from './normalizers';
 import type {
+  PayReservationApiResponse,
   PayReservationRequest,
   PayReservationResponse,
 } from '../types';
@@ -10,7 +11,11 @@ export async function payReservation(
   reservationId: PayReservationRequest
 ): Promise<PayReservationResponse> {
   const reservation = await request(
-    apiClient.post<PayReservationResponse>(`/reservations/${reservationId}/pay`)
+    apiClient.post<PayReservationApiResponse>(`/reservations/${reservationId}/pay`)
   );
-  return normalizeReservation(reservation) as PayReservationResponse;
+  const normalizedReservation = normalizeReservation(reservation);
+  if (!isPaidReservation(normalizedReservation)) {
+    throw new Error('Le paiement a réussi, mais le billet n’a pas été retourné par le serveur.');
+  }
+  return normalizedReservation;
 }

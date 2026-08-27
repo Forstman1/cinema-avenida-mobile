@@ -1,6 +1,15 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { ISODateString, Movie, Reservation, Screening, Seat, Ticket } from '.';
+import type {
+  ISODateString,
+  Movie,
+  MovieReference,
+  Reservation,
+  Screening,
+  ScreeningReference,
+  Seat,
+  Ticket,
+} from '.';
 
 export type AuthStackParamList = {
   Login: undefined;
@@ -19,8 +28,8 @@ export type RootStackParamList = {
   MovieDetails: { movieId: number; screening?: Screening; initialDate?: ISODateString };
   Screenings: { movie: Movie; initialDate?: ISODateString };
   SeatMap: { movie: Movie; screening: Screening };
-  Payment: { movie: Movie; screening: Screening; reservation: Reservation; seats: Seat[] };
-  Ticket: { movie: Movie; screening: Screening; reservation: Reservation; ticket: Ticket; seats: Seat[] };
+  Payment: { movie: MovieReference; screening: ScreeningReference; reservation: Reservation; seats: Seat[] };
+  Ticket: { movie: MovieReference; screening: ScreeningReference; reservation: Reservation; ticket: Ticket; seats: Seat[] };
   AdminMovies: undefined;
   AddMovie: { movie?: Movie } | undefined;
   ManageScreenings: { movie: Movie };

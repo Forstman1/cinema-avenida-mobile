@@ -2,14 +2,14 @@ import { create } from 'zustand';
 
 import { cancelReservation as cancelReservationRequest, getMyReservations } from '../api/reservations';
 import { getApiErrorMessage } from '../api/errors';
-import type { Movie, Reservation, Screening, Seat, Ticket } from '../types';
+import type { MovieReference, Reservation, ScreeningReference, Seat, Ticket } from '../types';
 
 export interface CompletedBooking {
   userId: number | null;
   reservation: Reservation;
   ticket: Ticket;
-  movie: Movie;
-  screening: Screening;
+  movie: MovieReference;
+  screening: ScreeningReference;
   seats: Seat[];
 }
 

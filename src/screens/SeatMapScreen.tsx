@@ -18,6 +18,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getApiErrorDetails, getApiErrorMessage } from '../api/errors';
 import ErrorState from '../components/ErrorState';
 import { useReservationStore } from '../store/reservationStore';
+import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 import type { Seat, SeatCategory, SeatStatus } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { SeatMapScreenProps } from '../types/navigation';
@@ -29,11 +30,11 @@ const SEATS_PER_ROW = 12;
 
 const CATEGORY_CONFIG: Record<
   SeatCategory,
-  { color: string; borderColor: string; price: number; label: string }
+  { color: string; borderColor: string; label: string }
 > = {
-  CLUB: { color: '#c9a227', borderColor: 'rgba(201,162,39,0.6)', price: 45, label: 'Club' },
-  NORMAL: { color: '#5a8bbf', borderColor: 'rgba(90,139,191,0.6)', price: 60, label: 'Normal' },
-  VIP: { color: '#8b5cf6', borderColor: 'rgba(139,92,246,0.6)', price: 90, label: 'VIP' },
+  CLUB: { color: '#c9a227', borderColor: 'rgba(201,162,39,0.6)', label: 'Club' },
+  NORMAL: { color: '#5a8bbf', borderColor: 'rgba(90,139,191,0.6)', label: 'Normal' },
+  VIP: { color: '#8b5cf6', borderColor: 'rgba(139,92,246,0.6)', label: 'VIP' },
 };
 
 function getCategoryByRow(row: string): SeatCategory {
@@ -82,6 +83,10 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
   const deselectSeats = useReservationStore((state) => state.deselectSeats);
   const lockSelectedSeats = useReservationStore((state) => state.lockSelectedSeats);
   const clearReservationDraft = useReservationStore((state) => state.clearReservationDraft);
+  const config = useCinemaConfigStore((state) => state.config);
+  const configLoading = useCinemaConfigStore((state) => state.isLoading);
+  const configError = useCinemaConfigStore((state) => state.error);
+  const fetchConfig = useCinemaConfigStore((state) => state.fetchConfig);
 
   const selectedIds = useMemo(() => new Set(selectedSeatIds), [selectedSeatIds]);
 
@@ -160,8 +165,9 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
   );
 
   const totalPrice = useMemo(() => {
-    return selectedSeats.reduce((sum, seat) => sum + CATEGORY_CONFIG[seat.category].price, 0);
-  }, [selectedSeats]);
+    if (!config) return null;
+    return selectedSeats.reduce((sum, seat) => sum + config.seatCategories[seat.category], 0);
+  }, [config, selectedSeats]);
 
   const selectedLabel = useMemo(() => {
     if (selectedSeats.length === 0) return '';
@@ -288,6 +294,26 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     );
   }
 
+  if (configError) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <ErrorState message={configError} onRetry={() => { void fetchConfig(); }} />
+      </SafeAreaView>
+    );
+  }
+
+  if (configLoading || !config) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <View style={styles.skeleton}>
+          <ActivityIndicator size="large" color="#b22222" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (isLoadingSeats) {
     return (
       <SafeAreaView style={styles.container}>
@@ -382,7 +408,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
                 <View style={[styles.legendDot, { backgroundColor: CATEGORY_CONFIG[cat].color }]} />
                 <View>
                   <Text style={styles.legendName}>{CATEGORY_CONFIG[cat].label}</Text>
-                  <Text style={styles.legendPrice}>{CATEGORY_CONFIG[cat].price} DH</Text>
+                  <Text style={styles.legendPrice}>{config.seatCategories[cat]} DH</Text>
                 </View>
               </View>
             ))}
