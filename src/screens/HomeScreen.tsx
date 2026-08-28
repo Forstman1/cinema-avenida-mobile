@@ -19,7 +19,6 @@ import VerticalMovieCard from '../components/VerticalMovieCard';
 import HomeSkeleton from '../components/HomeSkeleton';
 import ErrorState from '../components/ErrorState';
 import AdminDashboard from '../components/AdminDashboard';
-import { useAuth } from '../context/AuthContext';
 import {
   getRemainingDaysOfWeek,
   getTodayDateString,
@@ -36,6 +35,7 @@ import {
 import type { Movie, Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import { useMoviesStore } from '../store/moviesStore';
+import { useAuthStore } from '../store/authStore';
 
 type HomeNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
 
@@ -54,7 +54,7 @@ function formatSelectedDate(dateString: string): string {
 }
 
 export default function HomeScreen() {
-  const { user } = useAuth();
+  const user = useAuthStore((state) => state.user);
 
   if (user?.role === 'ADMIN') {
     return <AdminDashboard />;

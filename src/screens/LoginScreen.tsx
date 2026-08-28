@@ -17,7 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { MaterialIcons } from '@expo/vector-icons';
 
-import { useAuth } from '../context/AuthContext';
+import { useAuthStore } from '../store/authStore';
 import type { LoginScreenProps } from '../types/navigation';
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
@@ -27,7 +27,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const login = useAuthStore((state) => state.login);
 
   const handleLogin = async () => {
     Keyboard.dismiss();

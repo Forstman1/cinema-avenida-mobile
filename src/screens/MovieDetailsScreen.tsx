@@ -17,12 +17,12 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import ErrorState from '../components/ErrorState';
 import { formatDuration, formatScreeningDate, getNextScreening } from '../utils/date';
-import { useAuth } from '../context/AuthContext';
 import type { Movie, Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { MovieDetailsScreenProps } from '../types/navigation';
 import { useMoviesStore } from '../store/moviesStore';
 import { useCinemaConfigStore } from '../store/cinemaConfigStore';
+import { useAuthStore } from '../store/authStore';
 
 type DetailsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'MovieDetails'>;
 const EMPTY_SCREENINGS: Screening[] = [];
@@ -30,7 +30,7 @@ const EMPTY_SCREENINGS: Screening[] = [];
 export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
   const navigation = useNavigation<DetailsNavigationProp>();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const user = useAuthStore((state) => state.user);
   const { movieId, initialDate } = route.params;
 
   const movie = useMoviesStore((state) => state.moviesById[movieId] ?? null);

@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MaterialIcons } from '@expo/vector-icons';
 
-import { useAuth } from '../context/AuthContext';
+import { useAuthStore } from '../store/authStore';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
 import HomeScreen from '../screens/HomeScreen';
@@ -35,7 +35,7 @@ function AuthNavigator() {
 }
 
 function MainTabs() {
-  const { user } = useAuth();
+  const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'ADMIN';
 
   return (
@@ -108,7 +108,8 @@ function RootNavigator() {
 }
 
 export default function AppNavigator() {
-  const { user, loading } = useAuth();
+  const user = useAuthStore((state) => state.user);
+  const loading = useAuthStore((state) => state.loading);
 
   if (loading) {
     return (

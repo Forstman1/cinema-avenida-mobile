@@ -20,11 +20,11 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { useAuth } from '../context/AuthContext';
 import CircularProgress from './CircularProgress';
 import ErrorState from './ErrorState';
 import type { MainTabParamList, RootStackParamList } from '../types/navigation';
 import { useAdminDashboardStore } from '../store/adminDashboardStore';
+import { useAuthStore } from '../store/authStore';
 
 type AdminHomeNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Accueil'>,
@@ -69,7 +69,7 @@ function QuickStat({ icon, label, value }: QuickStatProps) {
 
 export default function AdminDashboard() {
   const navigation = useNavigation<AdminHomeNavigationProp>();
-  const { user } = useAuth();
+  const user = useAuthStore((state) => state.user);
   const insets = useSafeAreaInsets();
   const dashboard = useAdminDashboardStore((state) => state.dashboard);
   const isLoading = useAdminDashboardStore((state) => state.isLoading);
