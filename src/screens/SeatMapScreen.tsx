@@ -19,6 +19,10 @@ import { getApiErrorDetails, getApiErrorMessage } from '../api/errors';
 import ErrorState from '../components/ErrorState';
 import { useReservationStore } from '../store/reservationStore';
 import { useCinemaConfigStore } from '../store/cinemaConfigStore';
+import {
+  getReservationLockExpiry,
+  RESERVATION_EXPIRED_MESSAGE,
+} from '../utils/reservation-lock';
 import type { Seat, SeatCategory, SeatStatus } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { SeatMapScreenProps } from '../types/navigation';
@@ -68,12 +72,9 @@ function groupSeatsByRow(seats: Seat[]): SeatRow[] {
     }));
 }
 
-function getRemainingSeconds(lockedUntil: string | null): number {
-  if (!lockedUntil) return 0;
-  const now = Date.now();
-  const expiresAt = new Date(lockedUntil).getTime();
-  if (!Number.isFinite(expiresAt)) return 0;
-  return Math.max(0, Math.floor((expiresAt - now) / 1000));
+function getRemainingSeconds(lockExpiry: number | null): number {
+  if (lockExpiry === null) return 0;
+  return Math.max(0, Math.floor((lockExpiry - Date.now()) / 1000));
 }
 
 function formatCountdown(totalSeconds: number): string {
@@ -96,14 +97,13 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
   const seatError = useReservationStore((state) => state.seatError);
   const reservationError = useReservationStore((state) => state.reservationError);
   const pendingReservation = useReservationStore((state) => state.pendingReservation);
-  const lockedUntil = useReservationStore((state) => state.lockedUntil);
   const isLocking = useReservationStore((state) => state.isLocking);
   const loadSeats = useReservationStore((state) => state.loadSeats);
   const loadPendingReservation = useReservationStore((state) => state.loadPendingReservation);
   const toggleSeatInStore = useReservationStore((state) => state.toggleSeat);
   const deselectSeats = useReservationStore((state) => state.deselectSeats);
   const lockSelectedSeats = useReservationStore((state) => state.lockSelectedSeats);
-  const clearReservationDraft = useReservationStore((state) => state.clearReservationDraft);
+  const expirePendingReservation = useReservationStore((state) => state.expirePendingReservation);
   const config = useCinemaConfigStore((state) => state.config);
   const configLoading = useCinemaConfigStore((state) => state.isLoading);
   const configError = useCinemaConfigStore((state) => state.error);
@@ -111,6 +111,10 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
 
   const selectedIds = useMemo(() => new Set(selectedSeatIds), [selectedSeatIds]);
   const seatRows = useMemo(() => groupSeatsByRow(seats), [seats]);
+  const pendingLockExpiry = useMemo(
+    () => getReservationLockExpiry(pendingReservation),
+    [pendingReservation]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -121,26 +125,31 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
   );
 
   useEffect(() => {
-    if (!lockedUntil) {
+    if (!pendingReservation) {
       setPendingRemaining(0);
       return;
     }
 
+    if (pendingLockExpiry === null) {
+      setPendingRemaining(0);
+      void expirePendingReservation(screening?.id ?? null);
+      Alert.alert('Réservation expirée', RESERVATION_EXPIRED_MESSAGE);
+      return;
+    }
+
     const updateRemaining = () => {
-      const remaining = getRemainingSeconds(lockedUntil);
+      const remaining = getRemainingSeconds(pendingLockExpiry);
       setPendingRemaining(remaining);
       if (remaining <= 0) {
-        clearReservationDraft();
-        if (screening?.id) {
-          void loadSeats(screening.id, { showLoading: false });
-        }
+        void expirePendingReservation(screening?.id ?? null);
+        Alert.alert('Réservation expirée', RESERVATION_EXPIRED_MESSAGE);
       }
     };
 
     updateRemaining();
     const interval = setInterval(updateRemaining, 1000);
     return () => clearInterval(interval);
-  }, [clearReservationDraft, loadSeats, lockedUntil, screening?.id]);
+  }, [expirePendingReservation, pendingLockExpiry, pendingReservation, screening?.id]);
 
   const handleContinuePayment = () => {
     if (!pendingReservation || !movie || !screening) return;
@@ -172,7 +181,11 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     }
   }, [fetchSeats]);
 
-  const hasPendingReservation = Boolean(pendingReservation && pendingRemaining > 0);
+  const hasPendingReservation = Boolean(
+    pendingReservation &&
+    pendingLockExpiry !== null &&
+    pendingLockExpiry > Date.now()
+  );
 
   const toggleSeat = (seat: Seat) => {
     if (hasPendingReservation) return;

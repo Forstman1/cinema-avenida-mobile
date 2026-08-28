@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   RefreshControl,
@@ -20,39 +20,29 @@ import HomeSkeleton from '../components/HomeSkeleton';
 import ErrorState from '../components/ErrorState';
 import AdminDashboard from '../components/AdminDashboard';
 import {
+  formatCalendarDate,
+  getCalendarDateParts,
   getRemainingDaysOfWeek,
   getTodayDateString,
+  getWeekdayIndex,
   isScreeningInFuture,
-  parseLocalDate,
   toISODate,
-  toISODateString,
 } from '../utils/date';
 import {
   getFeaturedProgrammeMovie,
   getProgrammeMovies,
   type ProgrammeMovie,
 } from '../utils/programme';
-import type { Movie, Screening } from '../types';
+import type { ISODateString, Movie, Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import { useMoviesStore } from '../store/moviesStore';
 import { useAuthStore } from '../store/authStore';
+import { useCinemaConfigStore } from '../store/cinemaConfigStore';
+import { useCinemaDateContext } from '../hooks/useCinemaDateContext';
 
 type HomeNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
 
 const FRENCH_WEEKDAYS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
-const FRENCH_MONTHS = [
-  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
-];
-
-function formatSelectedDate(dateString: string): string {
-  const date = parseLocalDate(dateString);
-  if (!date) return dateString;
-
-  const weekday = date.toLocaleDateString('fr-FR', { weekday: 'long' });
-  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${date.getDate()} ${FRENCH_MONTHS[date.getMonth()]}`;
-}
-
 export default function HomeScreen() {
   const user = useAuthStore((state) => state.user);
 
@@ -72,14 +62,31 @@ function CustomerHomeScreen() {
   const moviesError = useMoviesStore((state) => state.moviesError);
   const loadMovies = useMoviesStore((state) => state.fetchMovies);
   const refreshMovies = useMoviesStore((state) => state.refreshMovies);
+  const cinemaTimezone = useCinemaConfigStore((state) => state.config?.timezone);
+  const dateContextNow = useCinemaDateContext(cinemaTimezone);
 
-  const today = useMemo(() => getTodayDateString(), []);
-  const weekDays = useMemo(() => getRemainingDaysOfWeek(), []);
-  const weekDateStrings = useMemo(
-    () => weekDays.map((date) => toISODateString(date)),
-    [weekDays]
+  const today = useMemo(
+    () => getTodayDateString(cinemaTimezone, dateContextNow),
+    [cinemaTimezone, dateContextNow]
   );
-  const [selectedDate, setSelectedDate] = useState(today);
+  const weekDateStrings = useMemo(
+    () => getRemainingDaysOfWeek(cinemaTimezone, dateContextNow),
+    [cinemaTimezone, dateContextNow]
+  );
+  const [selectedDate, setSelectedDate] = useState<ISODateString | null>(null);
+  const previousTimezone = useRef<string | undefined>(cinemaTimezone);
+  const effectiveSelectedDate = selectedDate && weekDateStrings.includes(selectedDate)
+    ? selectedDate
+    : today;
+
+  useEffect(() => {
+    const timezoneChanged = previousTimezone.current !== cinemaTimezone;
+    previousTimezone.current = cinemaTimezone;
+    setSelectedDate((current) => {
+      if (timezoneChanged || !current || !weekDateStrings.includes(current)) return today;
+      return current;
+    });
+  }, [cinemaTimezone, today, weekDateStrings]);
 
   const fetchMovies = useCallback(
     (showLoading = true) => loadMovies({ force: true, showLoading }),
@@ -115,16 +122,17 @@ function CustomerHomeScreen() {
   }, [movies, weekDateStrings]);
 
   const programmeMovies = useMemo<ProgrammeMovie[]>(() => {
-    return getProgrammeMovies(movies, selectedDate);
-  }, [movies, selectedDate]);
+    return getProgrammeMovies(movies, effectiveSelectedDate, cinemaTimezone, dateContextNow);
+  }, [cinemaTimezone, dateContextNow, effectiveSelectedDate, movies]);
 
   const hasScreeningsThisWeek = useMemo(
     () => movies.some((movie) =>
       (movie.screenings ?? []).some((screening) =>
-        weekDateStrings.includes(toISODate(screening.date)) && isScreeningInFuture(screening)
+        weekDateStrings.includes(toISODate(screening.date))
+        && isScreeningInFuture(screening, dateContextNow, cinemaTimezone)
       )
     ),
-    [movies, weekDateStrings]
+    [cinemaTimezone, dateContextNow, movies, weekDateStrings]
   );
 
   const featuredProgrammeMovie = useMemo<ProgrammeMovie | undefined>(() => {
@@ -141,7 +149,7 @@ function CustomerHomeScreen() {
     [programmeMovies]
   );
 
-  const selectedDateSummary = `${formatSelectedDate(selectedDate)} · ${programmeMovies.length} ${
+  const selectedDateSummary = `${formatCalendarDate(effectiveSelectedDate, cinemaTimezone)} · ${programmeMovies.length} ${
     programmeMovies.length === 1 ? 'film' : 'films'
   } · ${screeningCount} ${screeningCount === 1 ? 'séance' : 'séances'}`;
 
@@ -154,11 +162,10 @@ function CustomerHomeScreen() {
     }
   }, [refreshMovies]);
 
-  const handleMoviePress = (movie: Movie, screening?: Screening) => {
+  const handleMoviePress = (movie: Movie) => {
     navigation.navigate('MovieDetails', {
       movieId: movie.id,
-      screening,
-      initialDate: selectedDate,
+      initialDate: effectiveSelectedDate,
     });
   };
 
@@ -184,9 +191,9 @@ function CustomerHomeScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.daysRow}
         >
-          {weekDays.map((date, index) => {
-            const dateString = weekDateStrings[index];
-            const selected = dateString === selectedDate;
+          {weekDateStrings.map((dateString) => {
+            const dateParts = getCalendarDateParts(dateString);
+            const selected = dateString === effectiveSelectedDate;
 
             return (
               <TouchableOpacity
@@ -196,10 +203,10 @@ function CustomerHomeScreen() {
                 activeOpacity={0.8}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
-                accessibilityLabel={formatSelectedDate(dateString)}
+                accessibilityLabel={formatCalendarDate(dateString, cinemaTimezone)}
               >
                 <Text style={[styles.dayLabel, selected && styles.dayLabelSelected]}>
-                  {FRENCH_WEEKDAYS[date.getDay()]} {date.getDate()}
+                  {FRENCH_WEEKDAYS[getWeekdayIndex(dateString)]} {dateParts?.day ?? ''}
                 </Text>
               </TouchableOpacity>
             );

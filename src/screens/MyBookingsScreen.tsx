@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -24,6 +24,11 @@ import { useAuthStore } from '../store/authStore';
 import { useBookingsStore } from '../store/bookingsStore';
 import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 import { formatScreeningDate, getScreeningDateTime } from '../utils/date';
+import {
+  getReservationLockExpiry,
+  RESERVATION_EXPIRED_MESSAGE,
+} from '../utils/reservation-lock';
+import { useReservationStore } from '../store/reservationStore';
 import type { Reservation, Seat } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 
@@ -66,11 +71,21 @@ function getCancellationState(
 function getPendingReservation(reservations: Reservation[]): Reservation | null {
   const now = Date.now();
   for (const r of reservations) {
-    if (r.status !== 'EN_ATTENTE' || !r.reservationSeats?.length) continue;
-    const lockedUntils = r.reservationSeats
-      .map((rs) => (rs.lockedUntil ? new Date(rs.lockedUntil).getTime() : 0))
-      .filter((t) => t > 0);
-    if (lockedUntils.length > 0 && Math.max(...lockedUntils) > now) {
+    if (r.status !== 'EN_ATTENTE') continue;
+    const lockExpiry = getReservationLockExpiry(r);
+    if (lockExpiry !== null && lockExpiry > now) {
+      return r;
+    }
+  }
+  return null;
+}
+
+function getExpiredPendingReservation(reservations: Reservation[]): Reservation | null {
+  const now = Date.now();
+  for (const r of reservations) {
+    if (r.status !== 'EN_ATTENTE') continue;
+    const lockExpiry = getReservationLockExpiry(r);
+    if (lockExpiry === null || lockExpiry <= now) {
       return r;
     }
   }
@@ -78,13 +93,9 @@ function getPendingReservation(reservations: Reservation[]): Reservation | null 
 }
 
 function getRemainingSeconds(reservation: Reservation | null | undefined): number {
-  if (!reservation?.reservationSeats?.length) return 0;
-  const now = Date.now();
-  const lockedUntils = reservation.reservationSeats
-    .map((rs) => (rs.lockedUntil ? new Date(rs.lockedUntil).getTime() : 0))
-    .filter((t) => t > 0);
-  if (lockedUntils.length === 0) return 0;
-  return Math.max(0, Math.floor((Math.max(...lockedUntils) - now) / 1000));
+  const lockExpiry = getReservationLockExpiry(reservation);
+  if (lockExpiry === null) return 0;
+  return Math.max(0, Math.floor((lockExpiry - Date.now()) / 1000));
 }
 
 function formatCountdown(totalSeconds: number): string {
@@ -127,9 +138,12 @@ export default function MyBookingsScreen() {
   const refreshMyReservations = useBookingsStore((state) => state.refreshMyReservations);
   const cancelReservation = useBookingsStore((state) => state.cancelReservation);
   const selectBooking = useBookingsStore((state) => state.selectBooking);
+  const reservationDraft = useReservationStore((state) => state.pendingReservation);
+  const expirePendingReservation = useReservationStore((state) => state.expirePendingReservation);
   const [activeTab, setActiveTab] = useState<TabType>('upcoming');
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
+  const expirationHandledReservationId = useRef<number | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTimeMs(Date.now()), 30_000);
@@ -137,25 +151,61 @@ export default function MyBookingsScreen() {
   }, []);
 
   const pendingReservation = useMemo(() => getPendingReservation(reservations), [reservations]);
+  const expiredPendingReservation = useMemo(
+    () => pendingReservation ? null : getExpiredPendingReservation(reservations),
+    [pendingReservation, reservations]
+  );
 
   useEffect(() => {
     setRemainingSeconds(getRemainingSeconds(pendingReservation));
   }, [pendingReservation]);
 
+  const handlePendingExpiration = useCallback(async (reservation: Reservation) => {
+    try {
+      if (reservationDraft?.id === reservation.id) {
+        await expirePendingReservation(reservation.screening?.id ?? null);
+      }
+      await refreshMyReservations();
+    } catch {
+      // Expiration is still local-authoritative for the countdown; the next
+      // screen focus or refresh will reconcile the reservation with the API.
+    }
+    Alert.alert('Réservation expirée', RESERVATION_EXPIRED_MESSAGE);
+  }, [expirePendingReservation, refreshMyReservations, reservationDraft?.id]);
+
   useEffect(() => {
-    if (!pendingReservation || remainingSeconds <= 0) return;
-    const interval = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          void refreshMyReservations();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    if (
+      !expiredPendingReservation ||
+      expirationHandledReservationId.current === expiredPendingReservation.id
+    ) {
+      return;
+    }
+    expirationHandledReservationId.current = expiredPendingReservation.id;
+    void handlePendingExpiration(expiredPendingReservation);
+  }, [expiredPendingReservation, handlePendingExpiration]);
+
+  useEffect(() => {
+    if (!pendingReservation) {
+      setRemainingSeconds(0);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const remaining = getRemainingSeconds(pendingReservation);
+      setRemainingSeconds(remaining);
+      if (
+        remaining <= 0 &&
+        expirationHandledReservationId.current !== pendingReservation.id
+      ) {
+        expirationHandledReservationId.current = pendingReservation.id;
+        void handlePendingExpiration(pendingReservation);
+      }
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
     return () => clearInterval(interval);
-  }, [pendingReservation, remainingSeconds, refreshMyReservations]);
+  }, [handlePendingExpiration, pendingReservation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -267,7 +317,9 @@ export default function MyBookingsScreen() {
     const screening = reservation.screening;
     const movie = screening?.movie;
     const seats = reservation.reservationSeats?.map((rs) => rs.seat) ?? [];
-    const dateLabel = screening ? formatScreeningDate(screening.date) : '-';
+    const dateLabel = screening
+      ? formatScreeningDate(screening.date, cinemaTimezone, new Date(currentTimeMs))
+      : '-';
     const isCancelled = reservation.status === 'CANCELLED';
     const isHistory = dimmed || isCancelled;
     const cancellation = getCancellationState(reservation, cinemaTimezone, currentTimeMs);

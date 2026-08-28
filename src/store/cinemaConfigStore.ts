@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
-import { getCinemaConfig } from '../api/config';
 import { getApiErrorMessage } from '../api/errors';
+import { ConfigServiceInstance } from '../services/ConfigService';
 import type { CinemaConfig } from '../types';
 
 export interface CinemaConfigStore {
@@ -31,7 +31,7 @@ export const useCinemaConfigStore = create<CinemaConfigStore>((set, get) => ({
     let request: Promise<CinemaConfig | null> | null = null;
     request = (async () => {
       try {
-        const config = await getCinemaConfig();
+        const config = await ConfigServiceInstance.getCinemaConfig();
         if (requestVersion !== configRequestVersion) return null;
         set({ config, error: null });
         return config;

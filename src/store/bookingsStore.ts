@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
-import { cancelReservation as cancelReservationRequest, getMyReservations } from '../api/reservations';
 import { getApiErrorMessage } from '../api/errors';
+import { ReservationServiceInstance } from '../services/ReservationService';
 import type { MovieReference, Reservation, ScreeningReference, Seat, Ticket } from '../types';
 
 export interface CompletedBooking {
@@ -61,7 +61,7 @@ export const useBookingsStore = create<BookingsStore>((set, get) => {
     let request: Promise<void> | null = null;
     request = (async () => {
       try {
-        const reservations = await getMyReservations();
+        const reservations = await ReservationServiceInstance.getMyReservations();
         if (generation !== bookingsGeneration || requestId !== bookingsRequestId) return;
         set({ reservations, reservationsError: null });
       } catch (error: unknown) {
@@ -106,7 +106,7 @@ export const useBookingsStore = create<BookingsStore>((set, get) => {
       inFlightReservationsRequest = null;
       set({ cancellingReservationId: reservationId, cancellationError: null });
       try {
-        await cancelReservationRequest(reservationId);
+        await ReservationServiceInstance.cancelReservation(reservationId);
         if (generation !== bookingsGeneration) return;
 
         const updatedReservations = get().reservations.map((reservation) =>
@@ -133,7 +133,7 @@ export const useBookingsStore = create<BookingsStore>((set, get) => {
         // optional follow-up fails, the confirmed local cancellation remains.
         const reconciliationRequestId = ++bookingsRequestId;
         try {
-          const reservations = await getMyReservations();
+          const reservations = await ReservationServiceInstance.getMyReservations();
           if (generation !== bookingsGeneration || reconciliationRequestId !== bookingsRequestId) return;
           set({ reservations });
         } catch {

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,7 +16,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 
-import { getApiErrorDetails, getApiErrorMessage } from '../api/errors';
+import {
+  getApiErrorDetails,
+  getApiErrorMessage,
+  getScreeningMutationErrorMessage,
+} from '../api/errors';
 import ErrorState from '../components/ErrorState';
 import PosterImage from '../components/PosterImage';
 import { useAdminMoviesStore } from '../store/adminMoviesStore';
@@ -24,54 +28,61 @@ import { useAdminScreeningsStore } from '../store/adminScreeningsStore';
 import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 import type { Movie, Screening } from '../types';
 import type { ProgrammeScreenProps } from '../types/navigation';
-import { compareShowTimes, toHHMM, toISODate, toISODateString } from '../utils/date';
+import {
+  addCalendarDays,
+  compareShowTimes,
+  formatCalendarDate,
+  getCalendarDateParts,
+  getStartOfWeekDateString,
+  getTodayDateString,
+  getWeekdayIndex,
+  isScreeningDateTimeInPast,
+  toHHMM,
+  toISODate,
+} from '../utils/date';
+import { useCinemaDateContext } from '../hooks/useCinemaDateContext';
 
 const WEEKDAY_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-const MONTH_NAMES = [
-  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
-];
-
-function getStartOfWeek(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function formatFullDate(date: Date): string {
-  const weekday = date.toLocaleDateString('fr-FR', { weekday: 'long' });
-  const capitalized = weekday.charAt(0).toUpperCase() + weekday.slice(1);
-  return `${capitalized} ${date.getDate()} ${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
-}
-
 export default function ProgrammeScreen() {
   const navigation = useNavigation<ProgrammeScreenProps['navigation']>();
   const insets = useSafeAreaInsets();
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const cinemaTimezone = useCinemaConfigStore((state) => state.config?.timezone);
+  const dateContextNow = useCinemaDateContext(cinemaTimezone);
+  const today = useMemo(
+    () => getTodayDateString(cinemaTimezone, dateContextNow),
+    [cinemaTimezone, dateContextNow]
+  );
 
-  const [weekStart, setWeekStart] = useState<Date>(getStartOfWeek(today));
-  const [selectedIndex, setSelectedIndex] = useState<number>((today.getDay() + 6) % 7);
+  const [weekStart, setWeekStart] = useState(() =>
+    getStartOfWeekDateString(cinemaTimezone, dateContextNow)
+  );
+  const [selectedIndex, setSelectedIndex] = useState(() => {
+    const weekday = getWeekdayIndex(today);
+    return weekday === 0 ? 6 : weekday - 1;
+  });
 
-  const selectedDate = useMemo(
-    () => addDays(weekStart, selectedIndex),
+  const selectedDateString = useMemo(
+    () => addCalendarDays(weekStart, selectedIndex),
     [weekStart, selectedIndex]
   );
-  const selectedDateString = useMemo(
-    () => toISODateString(selectedDate),
-    [selectedDate]
-  );
+  const isSelectedDatePast = selectedDateString < today;
+  const previousDateContext = useRef(`${cinemaTimezone ?? 'UTC'}:${today}`);
+
+  useEffect(() => {
+    const nextDateContext = `${cinemaTimezone ?? 'UTC'}:${today}`;
+    const [previousTimezone, previousToday] = previousDateContext.current.split(':');
+    const contextChanged = previousDateContext.current !== nextDateContext;
+    const timezoneChanged = previousTimezone !== (cinemaTimezone ?? 'UTC');
+    const wasViewingCurrentDate = selectedDateString === previousToday;
+
+    if (timezoneChanged || (contextChanged && wasViewingCurrentDate)) {
+      setWeekStart(getStartOfWeekDateString(cinemaTimezone, dateContextNow));
+      const weekday = getWeekdayIndex(today);
+      setSelectedIndex(weekday === 0 ? 6 : weekday - 1);
+    }
+    previousDateContext.current = nextDateContext;
+  }, [cinemaTimezone, dateContextNow, selectedDateString, today]);
 
   const screeningIds = useAdminScreeningsStore(
     (state) => state.screeningIdsByDate[selectedDateString] ?? []
@@ -88,6 +99,16 @@ export default function ProgrammeScreen() {
   const isCreatingScreening = useAdminScreeningsStore((state) => state.isCreatingScreening);
   const createScreeningError = useAdminScreeningsStore((state) => state.createScreeningError);
   const clearCreateError = useAdminScreeningsStore((state) => state.clearCreateError);
+  const updateAdminScreening = useAdminScreeningsStore((state) => state.updateScreening);
+  const isUpdatingScreening = useAdminScreeningsStore((state) => state.isUpdatingScreening);
+  const updatingScreeningId = useAdminScreeningsStore((state) => state.updatingScreeningId);
+  const updateScreeningError = useAdminScreeningsStore((state) => state.updateScreeningError);
+  const deleteAdminScreening = useAdminScreeningsStore((state) => state.deleteScreening);
+  const isDeletingScreening = useAdminScreeningsStore((state) => state.isDeletingScreening);
+  const deletingScreeningId = useAdminScreeningsStore((state) => state.deletingScreeningId);
+  const deleteScreeningError = useAdminScreeningsStore((state) => state.deleteScreeningError);
+  const clearUpdateError = useAdminScreeningsStore((state) => state.clearUpdateError);
+  const clearDeleteError = useAdminScreeningsStore((state) => state.clearDeleteError);
   const [refreshing, setRefreshing] = useState(false);
 
   const config = useCinemaConfigStore((state) => state.config);
@@ -101,6 +122,8 @@ export default function ProgrammeScreen() {
   const fetchMovies = useAdminMoviesStore((state) => state.fetchMovies);
   const [modalVisible, setModalVisible] = useState(false);
   const [pendingSlot, setPendingSlot] = useState<string | null>(null);
+  const [editingScreening, setEditingScreening] = useState<Screening | null>(null);
+  const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
   const schedule = useMemo(
     () => screeningIds
       .map((id) => screeningsById[id])
@@ -129,7 +152,7 @@ export default function ProgrammeScreen() {
 
   const slots = useMemo(() => {
     return (config?.screeningSlots ?? []).map((time) => {
-      const screening = schedule.find((s) => s.showTime === time);
+      const screening = schedule.find((s) => toHHMM(s.showTime) === toHHMM(time));
       const movie = screening
         ? movies.find((candidate) => candidate.id === screening.movieId)
         : undefined;
@@ -138,8 +161,32 @@ export default function ProgrammeScreen() {
   }, [config, movies, schedule]);
 
   const openMoviePicker = async (slot: string) => {
-    if (!configAvailable) return;
+    if (
+      !configAvailable
+      || isSelectedDatePast
+      || isScreeningDateTimeInPast(selectedDateString, slot, cinemaTimezone, dateContextNow)
+    ) return;
     setPendingSlot(slot);
+    setEditingScreening(null);
+    setSelectedMovieId(null);
+    clearUpdateError();
+    clearDeleteError();
+    setModalVisible(true);
+    if (movies.length === 0) {
+      await fetchMovies();
+    }
+  };
+
+  const openEditMoviePicker = async (screening: Screening, slot: string) => {
+    if (
+      !configAvailable
+      || isScreeningDateTimeInPast(screening.date, slot, cinemaTimezone, dateContextNow)
+    ) return;
+    setPendingSlot(toHHMM(slot));
+    setEditingScreening(screening);
+    setSelectedMovieId(screening.movieId);
+    clearUpdateError();
+    clearDeleteError();
     setModalVisible(true);
     if (movies.length === 0) {
       await fetchMovies();
@@ -147,13 +194,49 @@ export default function ProgrammeScreen() {
   };
 
   const closeModal = () => {
+    if (isCreatingScreening || isUpdatingScreening) return;
     setModalVisible(false);
     setPendingSlot(null);
+    setEditingScreening(null);
+    setSelectedMovieId(null);
     clearCreateError();
+    clearUpdateError();
+    clearDeleteError();
   };
 
   const handleSelectMovie = async (movie: Movie) => {
     if (!pendingSlot || !configAvailable) return;
+    if (isScreeningDateTimeInPast(selectedDateString, pendingSlot, cinemaTimezone, new Date())) {
+      Alert.alert(
+        'Séance dans le passé',
+        'Impossible de programmer une séance dans le passé.'
+      );
+      return;
+    }
+    setSelectedMovieId(movie.id);
+
+    if (editingScreening) {
+      try {
+        const updatedScreening = await updateAdminScreening(editingScreening.id, {
+          movieId: movie.id,
+          date: toISODate(selectedDateString),
+          showTime: toHHMM(pendingSlot),
+        });
+        if (!updatedScreening) return;
+        closeModal();
+        await fetchSchedule();
+      } catch (error: unknown) {
+        setSelectedMovieId(editingScreening.movieId);
+        Alert.alert(
+          'Modification impossible',
+          getScreeningMutationErrorMessage(error, 'update') ||
+            updateScreeningError ||
+            'Impossible de modifier la séance.',
+        );
+      }
+      return;
+    }
+
     try {
       const createdScreening = await createAdminScreening({
         movieId: movie.id,
@@ -180,18 +263,53 @@ export default function ProgrammeScreen() {
     }
   };
 
+  const performDelete = async (screening: Screening) => {
+    try {
+      const deleted = await deleteAdminScreening(screening.id);
+      if (!deleted) return;
+      await fetchSchedule();
+    } catch (error: unknown) {
+      Alert.alert(
+        'Suppression impossible',
+        getScreeningMutationErrorMessage(error, 'delete') ||
+          deleteScreeningError ||
+          'Impossible de supprimer la séance.',
+      );
+    }
+  };
+
+  const confirmDelete = (screening: Screening) => {
+    clearDeleteError();
+    Alert.alert(
+      'Supprimer cette séance ?',
+      'Cette action est définitive.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            void performDelete(screening);
+          },
+        },
+      ],
+    );
+  };
+
   const weekDays = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    return Array.from({ length: 7 }, (_, i) => addCalendarDays(weekStart, i));
   }, [weekStart]);
 
   const isSelectedDay = (index: number) => index === selectedIndex;
 
   const renderMovieItem = ({ item }: { item: Movie }) => (
     <TouchableOpacity
-      style={styles.movieRow}
+      style={[styles.movieRow, selectedMovieId === item.id && styles.movieRowSelected]}
       onPress={() => handleSelectMovie(item)}
       activeOpacity={0.8}
-      disabled={isCreatingScreening}
+      disabled={isCreatingScreening || isUpdatingScreening}
+      accessibilityRole="button"
+      accessibilityLabel={`${editingScreening ? 'Modifier avec' : 'Ajouter'} ${item.title}`}
     >
       <PosterImage
         uri={item.poster}
@@ -207,7 +325,11 @@ export default function ProgrammeScreen() {
           <Text style={styles.movieMeta}>{item.duration}</Text>
         </View>
       </View>
-      <MaterialIcons name="chevron-right" size={22} color="#aa8986" />
+      {selectedMovieId === item.id ? (
+        <MaterialIcons name="check-circle" size={22} color="#ffb4ac" />
+      ) : (
+        <MaterialIcons name="chevron-right" size={22} color="#aa8986" />
+      )}
     </TouchableOpacity>
   );
 
@@ -243,14 +365,15 @@ export default function ProgrammeScreen() {
         <View style={styles.weekStrip}>
           <TouchableOpacity
             style={styles.arrowButton}
-            onPress={() => setWeekStart((prev) => addDays(prev, -7))}
+            onPress={() => setWeekStart((prev) => addCalendarDays(prev, -7))}
             activeOpacity={0.8}
           >
             <MaterialIcons name="chevron-left" size={24} color="#e5e2e1" />
           </TouchableOpacity>
 
           <View style={styles.daysRow}>
-            {weekDays.map((date, index) => {
+            {weekDays.map((dateString, index) => {
+              const dateParts = getCalendarDateParts(dateString);
               const selected = isSelectedDay(index);
               return (
                 <TouchableOpacity
@@ -263,7 +386,7 @@ export default function ProgrammeScreen() {
                     {WEEKDAY_SHORT[index]}
                   </Text>
                   <Text style={[styles.dayNumber, selected && styles.dayNumberSelected]}>
-                    {date.getDate()}
+                    {dateParts?.day ?? ''}
                   </Text>
                 </TouchableOpacity>
               );
@@ -272,14 +395,20 @@ export default function ProgrammeScreen() {
 
           <TouchableOpacity
             style={styles.arrowButton}
-            onPress={() => setWeekStart((prev) => addDays(prev, 7))}
+            onPress={() => setWeekStart((prev) => addCalendarDays(prev, 7))}
             activeOpacity={0.8}
           >
             <MaterialIcons name="chevron-right" size={24} color="#e5e2e1" />
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.dateTitle}>{formatFullDate(selectedDate)}</Text>
+        <Text style={styles.dateTitle}>{formatCalendarDate(selectedDateString, cinemaTimezone, true)}</Text>
+        {isSelectedDatePast ? (
+          <View style={styles.readOnlyState}>
+            <MaterialIcons name="lock-outline" size={15} color="#aa8986" />
+            <Text style={styles.readOnlyText}>Lecture seule — les séances passées restent visibles.</Text>
+          </View>
+        ) : null}
 
         {configError ? (
           <ErrorState message={configError} onRetry={() => { void fetchConfig(); }} />
@@ -296,7 +425,25 @@ export default function ProgrammeScreen() {
             ) : null}
             <View style={styles.cards}>
               {slots.map(({ time, screening, movie }) => {
-                const assigned = !!screening && !!movie;
+                const assigned = Boolean(screening);
+                const isSlotPast = isScreeningDateTimeInPast(
+                  selectedDateString,
+                  time,
+                  cinemaTimezone,
+                  dateContextNow
+                );
+                const isAssignedScreeningPast = screening
+                  ? isScreeningDateTimeInPast(
+                    screening.date,
+                    screening.showTime,
+                    cinemaTimezone,
+                    dateContextNow
+                  )
+                  : false;
+                const isUpdatingThisScreening =
+                  isUpdatingScreening && updatingScreeningId === screening?.id;
+                const isDeletingThisScreening =
+                  isDeletingScreening && deletingScreeningId === screening?.id;
                 return (
                   <View
                     key={time}
@@ -310,22 +457,71 @@ export default function ProgrammeScreen() {
                       <Text style={styles.timeText}>{time}</Text>
                     </View>
 
-                    {assigned ? (
+                    {screening ? (
                       <View style={styles.assignedContent}>
                         <Text style={styles.assignedTitle} numberOfLines={2}>
-                          {movie!.title}
+                          {movie?.title ?? 'Film indisponible'}
                         </Text>
-                        <View style={styles.assignedMetaRow}>
-                          <MaterialIcons name="schedule" size={12} color="#aa8986" />
-                          <Text style={styles.assignedMeta}>{movie!.duration}</Text>
+                        {movie ? (
+                          <View style={styles.assignedMetaRow}>
+                            <MaterialIcons name="schedule" size={12} color="#aa8986" />
+                            <Text style={styles.assignedMeta}>{movie.duration}</Text>
+                          </View>
+                        ) : null}
+                        <View style={styles.assignedActions}>
+                          <TouchableOpacity
+                            style={[
+                              styles.assignedActionButton,
+                              isAssignedScreeningPast && styles.assignedActionButtonDisabled,
+                            ]}
+                            onPress={() => openEditMoviePicker(screening, time)}
+                            activeOpacity={0.8}
+                            disabled={
+                              isAssignedScreeningPast
+                              || isCreatingScreening
+                              || isUpdatingScreening
+                              || isDeletingScreening
+                            }
+                            accessibilityRole="button"
+                            accessibilityLabel={`Modifier la séance de ${time}`}
+                            accessibilityState={{ disabled: isAssignedScreeningPast }}
+                          >
+                            {isUpdatingThisScreening ? (
+                              <ActivityIndicator size="small" color="#ffb4ac" />
+                            ) : (
+                              <MaterialIcons name="edit" size={16} color="#ffb4ac" />
+                            )}
+                            <Text style={styles.assignedActionText}>Modifier</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.assignedActionButton}
+                            onPress={() => confirmDelete(screening)}
+                            activeOpacity={0.8}
+                            disabled={isCreatingScreening || isUpdatingScreening || isDeletingScreening}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Supprimer la séance de ${time}`}
+                          >
+                            {isDeletingThisScreening ? (
+                              <ActivityIndicator size="small" color="#ffb4ac" />
+                            ) : (
+                              <MaterialIcons name="delete-outline" size={16} color="#ffb4ac" />
+                            )}
+                            <Text style={styles.assignedActionText}>Supprimer</Text>
+                          </TouchableOpacity>
                         </View>
                       </View>
                     ) : (
                       <TouchableOpacity
-                        style={styles.addButton}
+                        style={[styles.addButton, (isSelectedDatePast || isSlotPast) && styles.addButtonDisabled]}
                         onPress={() => openMoviePicker(time)}
                         activeOpacity={0.8}
-                        disabled={!configAvailable}
+                        disabled={!configAvailable || isSelectedDatePast || isSlotPast}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          isSelectedDatePast || isSlotPast
+                            ? `Créneau passé à ${time}`
+                            : `Ajouter une séance à ${time}`
+                        }
                       >
                         <MaterialIcons name="add" size={18} color="#ffb4ac" />
                         <Text style={styles.addButtonText}>Ajouter</Text>
@@ -357,10 +553,13 @@ export default function ProgrammeScreen() {
             <View style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}>
               <View style={{ width: 40 }} />
               <View style={styles.modalTitleBlock}>
-                <Text style={styles.modalTitle}>Choisir un film</Text>
+                <Text style={styles.modalTitle}>
+                  {editingScreening ? 'Modifier la séance' : 'Choisir un film'}
+                </Text>
                 {pendingSlot && (
                   <Text style={styles.modalSubtitle}>
-                    {pendingSlot} · {formatFullDate(selectedDate)}
+                    {pendingSlot} · {formatCalendarDate(selectedDateString, cinemaTimezone, true)}
+                    {editingScreening ? ' · Remplacer le film' : ''}
                   </Text>
                 )}
               </View>
@@ -368,7 +567,7 @@ export default function ProgrammeScreen() {
                 style={styles.closeButton}
                 onPress={closeModal}
                 activeOpacity={0.8}
-                disabled={isCreatingScreening}
+                disabled={isCreatingScreening || isUpdatingScreening}
               >
                 <MaterialIcons name="close" size={24} color="#e5e2e1" />
               </TouchableOpacity>
@@ -501,6 +700,18 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 16,
   },
+  readOnlyState: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: -8,
+    marginBottom: 14,
+  },
+  readOnlyText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: '#aa8986',
+  },
   emptyScheduleText: {
     fontFamily: 'Inter-Regular',
     fontSize: 14,
@@ -558,10 +769,37 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#aa8986',
   },
+  assignedActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  assignedActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,180,172,0.25)',
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 9,
+  },
+  assignedActionButtonDisabled: {
+    opacity: 0.45,
+  },
+  assignedActionText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 12,
+    color: '#ffb4ac',
+  },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  addButtonDisabled: {
+    opacity: 0.45,
   },
   addButtonText: {
     fontFamily: 'Inter-SemiBold',
@@ -632,6 +870,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingVertical: 10,
+  },
+  movieRowSelected: {
+    backgroundColor: 'rgba(178,34,34,0.16)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
   },
   moviePoster: {
     width: 48,

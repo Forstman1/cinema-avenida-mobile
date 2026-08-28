@@ -20,6 +20,10 @@ import { useAuthStore } from '../store/authStore';
 import { useBookingsStore } from '../store/bookingsStore';
 import { useReservationStore } from '../store/reservationStore';
 import { parseLocalDate, toISODate } from '../utils/date';
+import {
+  getReservationLockExpiry,
+  RESERVATION_EXPIRED_MESSAGE,
+} from '../utils/reservation-lock';
 import type {
   Movie,
   MovieReference,
@@ -34,12 +38,9 @@ import type { PaymentScreenProps } from '../types/navigation';
 
 type PaymentNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Payment'>;
 
-function getRemainingSeconds(lockedUntil: string | null): number {
-  if (!lockedUntil) return 0;
-  const now = Date.now();
-  const expiresAt = new Date(lockedUntil).getTime();
-  if (!Number.isFinite(expiresAt)) return 0;
-  const remaining = Math.floor((expiresAt - now) / 1000);
+function getRemainingSeconds(lockExpiry: number | null): number {
+  if (lockExpiry === null) return 0;
+  const remaining = Math.floor((lockExpiry - Date.now()) / 1000);
   return Math.max(0, remaining);
 }
 
@@ -60,20 +61,6 @@ function formatFullDate(dateString: string): string {
 }
 
 const EMPTY_SEATS: Seat[] = [];
-
-function getReservationLockedUntil(reservation: Reservation | null): string | null {
-  const values = (reservation?.reservationSeats ?? [])
-    .map((reservationSeat) => reservationSeat.lockedUntil)
-    .filter(
-      (value): value is string =>
-        typeof value === 'string' && value.length > 0 && !Number.isNaN(Date.parse(value))
-    );
-
-  if (values.length === 0) return null;
-  return values.reduce((latest, value) =>
-    Date.parse(value) > Date.parse(latest) ? value : latest
-  );
-}
 
 function isCompleteMovie(movie: MovieReference): movie is Movie {
   return 'synopsis' in movie;
@@ -146,7 +133,7 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
   const isPaying = useReservationStore((state) => state.isPaying);
   const payReservation = useReservationStore((state) => state.payReservation);
   const clearReservationDraft = useReservationStore((state) => state.clearReservationDraft);
-  const loadSeats = useReservationStore((state) => state.loadSeats);
+  const expirePendingReservation = useReservationStore((state) => state.expirePendingReservation);
   const hydrateReservation = useReservationStore((state) => state.hydrateReservation);
 
   const reservation = useMemo(() => {
@@ -161,19 +148,17 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
     [reservation]
   );
 
-  const reservationLockedUntil = useMemo(
-    () => getReservationLockedUntil(reservation),
+  const reservationLockExpiry = useMemo(
+    () => getReservationLockExpiry(reservation),
     [reservation]
   );
-  const effectiveLockedUntil = reservationLockedUntil ??
-    (storeReservation?.id === reservation?.id ? lockedUntil : null);
 
   useEffect(() => {
     if (!reservation) return;
     if (
       storeReservation?.id !== reservation.id ||
       currentScreeningId !== reservation.screening?.id ||
-      lockedUntil !== reservationLockedUntil
+      lockedUntil !== reservationLockExpiry
     ) {
       hydrateReservation(reservation, seats);
     }
@@ -182,23 +167,23 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
     hydrateReservation,
     lockedUntil,
     reservation,
-    reservationLockedUntil,
+    reservationLockExpiry,
     seats,
     storeReservation?.id,
   ]);
 
   const [remainingSeconds, setRemainingSeconds] = useState(() =>
-    getRemainingSeconds(effectiveLockedUntil)
+    getRemainingSeconds(reservationLockExpiry)
   );
   const [expired, setExpired] = useState(false);
 
   const seatLabels = useMemo(() => seats.map((s) => `${s.row}${s.number}`).join(', '), [seats]);
 
   useEffect(() => {
-    const remaining = getRemainingSeconds(effectiveLockedUntil);
+    const remaining = getRemainingSeconds(reservationLockExpiry);
     setExpired(remaining <= 0);
     setRemainingSeconds(remaining);
-  }, [effectiveLockedUntil]);
+  }, [reservationLockExpiry]);
 
   const handleReturnToSeats = useCallback(() => {
     if (movie && isCompleteMovie(movie) && screening) {
@@ -211,22 +196,25 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
   const handleExpiration = useCallback(() => {
     setExpired(true);
     setRemainingSeconds(0);
-    clearReservationDraft();
-    if (screening?.id) {
-      void loadSeats(screening.id, { showLoading: false });
-    }
+    void expirePendingReservation(screening?.id ?? null);
     Alert.alert(
       'Réservation expirée',
-      'Veuillez sélectionner vos sièges à nouveau.',
+      RESERVATION_EXPIRED_MESSAGE,
       [{ text: 'Choisir des sièges', onPress: handleReturnToSeats }]
     );
-  }, [clearReservationDraft, handleReturnToSeats, loadSeats, screening?.id]);
+  }, [expirePendingReservation, handleReturnToSeats, screening?.id]);
 
   useEffect(() => {
-    if (!effectiveLockedUntil || expired) return;
+    if (!expired && reservation?.status === 'EN_ATTENTE' && reservationLockExpiry === null) {
+      handleExpiration();
+    }
+  }, [expired, handleExpiration, reservation, reservationLockExpiry]);
+
+  useEffect(() => {
+    if (reservationLockExpiry === null || expired) return;
 
     const updateRemaining = () => {
-      const remaining = getRemainingSeconds(effectiveLockedUntil);
+      const remaining = getRemainingSeconds(reservationLockExpiry);
       setRemainingSeconds(remaining);
       if (remaining <= 0) handleExpiration();
     };
@@ -235,7 +223,7 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
     const interval = setInterval(updateRemaining, 1000);
 
     return () => clearInterval(interval);
-  }, [effectiveLockedUntil, expired, handleExpiration]);
+  }, [expired, handleExpiration, reservationLockExpiry]);
 
   const isExpired = expired || remainingSeconds <= 0;
   const isUrgent = remainingSeconds < 120;
@@ -285,10 +273,7 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
           onPress: () => {
             if (isExpiredError) {
               setExpired(true);
-              clearReservationDraft();
-              if (screening?.id) {
-                void loadSeats(screening.id, { showLoading: false });
-              }
+              void expirePendingReservation(screening?.id ?? null);
               handleReturnToSeats();
             }
           },

@@ -205,6 +205,12 @@ export type UpdateMovieRequest = { id: number; payload: MovieRequest };
 export type UpdateMovieResponse = Movie;
 export type CreateScreeningRequest = ScreeningRequest;
 export type CreateScreeningResponse = Screening;
+export type UpdateScreeningRequest = { id: number; payload: ScreeningRequest };
+export type UpdateScreeningResponse = Screening;
+export type DeleteScreeningRequest = number;
+export interface DeleteScreeningResponse {
+  message: string;
+}
 
 export type GetSeatsByScreeningIdRequest = number;
 export type GetSeatsByScreeningIdResponse = Seat[];

@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -14,11 +15,23 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 
-import { getApiErrorMessage } from '../api/errors';
+import {
+  getApiErrorMessage,
+  getScreeningMutationErrorMessage,
+} from '../api/errors';
 import ErrorState from '../components/ErrorState';
 import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 import { useAdminScreeningsStore } from '../store/adminScreeningsStore';
-import { compareShowTimes, parseLocalDate, toHHMM, toISODate, toISODateString } from '../utils/date';
+import {
+  compareShowTimes,
+  formatCalendarDate,
+  getTodayDateString,
+  isScreeningDateTimeInPast,
+  parseLocalDate,
+  toHHMM,
+  toISODate,
+} from '../utils/date';
+import { useCinemaDateContext } from '../hooks/useCinemaDateContext';
 import type { Movie, Screening } from '../types';
 import type { ManageScreeningsScreenProps } from '../types/navigation';
 
@@ -42,6 +55,12 @@ export default function ManageScreeningsScreen({
   const configError = useCinemaConfigStore((state) => state.error);
   const fetchConfig = useCinemaConfigStore((state) => state.fetchConfig);
   const configAvailable = Boolean(config && !configLoading && !configError);
+  const cinemaTimezone = config?.timezone;
+  const dateContextNow = useCinemaDateContext(cinemaTimezone);
+  const todayDate = useMemo(
+    () => getTodayDateString(cinemaTimezone, dateContextNow),
+    [cinemaTimezone, dateContextNow]
+  );
 
   const screeningIds = useAdminScreeningsStore(
     (state) => state.screeningIdsByMovieId[movie.id] ?? []
@@ -59,9 +78,28 @@ export default function ManageScreeningsScreen({
   const createAdminScreening = useAdminScreeningsStore((state) => state.createScreening);
   const isCreatingScreening = useAdminScreeningsStore((state) => state.isCreatingScreening);
   const createScreeningError = useAdminScreeningsStore((state) => state.createScreeningError);
+  const updateAdminScreening = useAdminScreeningsStore((state) => state.updateScreening);
+  const isUpdatingScreening = useAdminScreeningsStore((state) => state.isUpdatingScreening);
+  const updatingScreeningId = useAdminScreeningsStore((state) => state.updatingScreeningId);
+  const updateScreeningError = useAdminScreeningsStore((state) => state.updateScreeningError);
+  const deleteAdminScreening = useAdminScreeningsStore((state) => state.deleteScreening);
+  const isDeletingScreening = useAdminScreeningsStore((state) => state.isDeletingScreening);
+  const deletingScreeningId = useAdminScreeningsStore((state) => state.deletingScreeningId);
+  const deleteScreeningError = useAdminScreeningsStore((state) => state.deleteScreeningError);
+  const clearUpdateError = useAdminScreeningsStore((state) => state.clearUpdateError);
+  const clearDeleteError = useAdminScreeningsStore((state) => state.clearDeleteError);
 
-  const [date, setDate] = useState<string>(toISODateString(new Date()));
+  const [date, setDate] = useState<string>('');
+  const hasEditedDate = useRef(false);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [editScreening, setEditScreening] = useState<Screening | null>(null);
+  const [editDate, setEditDate] = useState<string>('');
+  const [editSlot, setEditSlot] = useState<string | null>(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+
+  useEffect(() => {
+    if (!hasEditedDate.current) setDate(todayDate);
+  }, [todayDate]);
   const screenings = useMemo(
     () => screeningIds
       .map((id) => screeningsById[id])
@@ -93,7 +131,43 @@ export default function ManageScreeningsScreen({
   const isValidTime = Boolean(
     config && selectedSlot && config.screeningSlots.includes(toHHMM(selectedSlot))
   );
-  const canSubmit = configAvailable && Number.isInteger(movie.id) && movie.id > 0 && isValidDate && isValidTime;
+  const isSelectedDateTimePast = Boolean(
+    isValidDate
+    && isValidTime
+    && selectedSlot
+    && isScreeningDateTimeInPast(
+      date.trim(),
+      toHHMM(selectedSlot),
+      cinemaTimezone,
+      dateContextNow
+    )
+  );
+  const canSubmit = configAvailable
+    && Number.isInteger(movie.id)
+    && movie.id > 0
+    && isValidDate
+    && isValidTime
+    && !isSelectedDateTimePast;
+  const isEditDateValid = Boolean(parseLocalDate(editDate.trim()));
+  const isEditTimeValid = Boolean(
+    config && editSlot && config.screeningSlots.includes(toHHMM(editSlot))
+  );
+  const isEditDateTimePast = Boolean(
+    isEditDateValid
+    && isEditTimeValid
+    && editSlot
+    && isScreeningDateTimeInPast(
+      editDate.trim(),
+      toHHMM(editSlot),
+      cinemaTimezone,
+      dateContextNow
+    )
+  );
+  const canSaveEdit = configAvailable
+    && editScreening !== null
+    && isEditDateValid
+    && isEditTimeValid
+    && !isEditDateTimePast;
 
   const handleAdd = async () => {
     if (!configAvailable) return;
@@ -109,6 +183,13 @@ export default function ManageScreeningsScreen({
       Alert.alert('Champs invalides', 'Veuillez choisir un créneau au format HH:mm.');
       return;
     }
+    if (isScreeningDateTimeInPast(date.trim(), toHHMM(selectedSlot), cinemaTimezone, new Date())) {
+      Alert.alert(
+        'Séance dans le passé',
+        'Impossible de programmer une séance dans le passé.'
+      );
+      return;
+    }
 
     try {
       const createdScreening = await createAdminScreening({
@@ -118,7 +199,8 @@ export default function ManageScreeningsScreen({
       });
       if (!createdScreening) return;
       setSelectedSlot(null);
-      setDate(toISODateString(new Date()));
+      hasEditedDate.current = false;
+      setDate(todayDate);
       await fetchScreenings();
     } catch (error: unknown) {
       Alert.alert(
@@ -126,6 +208,91 @@ export default function ManageScreeningsScreen({
         getApiErrorMessage(error, createScreeningError ?? 'Impossible de créer la séance.')
       );
     }
+  };
+
+  const openEditModal = (screening: Screening) => {
+    clearUpdateError();
+    clearDeleteError();
+    setEditScreening(screening);
+    setEditDate(toISODate(screening.date));
+    setEditSlot(toHHMM(screening.showTime));
+    setEditModalVisible(true);
+  };
+
+  const closeEditModal = () => {
+    if (isUpdatingScreening) return;
+    setEditModalVisible(false);
+    setEditScreening(null);
+    clearUpdateError();
+  };
+
+  const handleEdit = async () => {
+    if (!editScreening || !configAvailable) return;
+    if (!isEditDateValid) {
+      Alert.alert('Champs invalides', 'Veuillez saisir une date valide au format AAAA-MM-JJ.');
+      return;
+    }
+    if (!isEditTimeValid || !editSlot) {
+      Alert.alert('Champs invalides', 'Veuillez choisir un créneau au format HH:mm.');
+      return;
+    }
+    if (isScreeningDateTimeInPast(editDate.trim(), toHHMM(editSlot), cinemaTimezone, new Date())) {
+      Alert.alert(
+        'Séance dans le passé',
+        'Impossible de modifier une séance dans le passé.'
+      );
+      return;
+    }
+
+    try {
+      const updatedScreening = await updateAdminScreening(editScreening.id, {
+        movieId: movie.id,
+        date: toISODate(editDate.trim()),
+        showTime: toHHMM(editSlot),
+      });
+      if (!updatedScreening) return;
+      closeEditModal();
+      await fetchScreenings();
+    } catch (error: unknown) {
+      Alert.alert(
+        'Modification impossible',
+        getScreeningMutationErrorMessage(error, 'update') ||
+          updateScreeningError ||
+          'Impossible de modifier la séance.',
+      );
+    }
+  };
+
+  const performDelete = async (screening: Screening) => {
+    try {
+      const deleted = await deleteAdminScreening(screening.id);
+      if (!deleted) return;
+      await fetchScreenings();
+    } catch (error: unknown) {
+      Alert.alert(
+        'Suppression impossible',
+        getScreeningMutationErrorMessage(error, 'delete') ||
+          deleteScreeningError ||
+          'Impossible de supprimer la séance.',
+      );
+    }
+  };
+
+  const confirmDelete = (screening: Screening) => {
+    Alert.alert(
+      'Supprimer la séance ?',
+      `Voulez-vous supprimer la séance du ${toISODate(screening.date)} à ${toHHMM(screening.showTime)} ?`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            void performDelete(screening);
+          },
+        },
+      ],
+    );
   };
 
   if (configError) {
@@ -200,7 +367,10 @@ export default function ManageScreeningsScreen({
           <TextInput
             style={styles.input}
             value={date}
-            onChangeText={setDate}
+            onChangeText={(value) => {
+              hasEditedDate.current = true;
+              setDate(value);
+            }}
             placeholder="YYYY-MM-DD"
             placeholderTextColor="#666"
             autoCapitalize="none"
@@ -241,6 +411,12 @@ export default function ManageScreeningsScreen({
           )}
         </TouchableOpacity>
 
+        {isSelectedDateTimePast ? (
+          <Text style={styles.pastWarning}>
+            Impossible de programmer une séance dans le passé.
+          </Text>
+        ) : null}
+
         <Text style={styles.sectionTitle}>Séances existantes</Text>
 
         {sortedDates.length === 0 ? (
@@ -249,19 +425,46 @@ export default function ManageScreeningsScreen({
           sortedDates.map((dateKey) => (
             <View key={dateKey} style={styles.dateGroup}>
               <Text style={styles.dateLabel}>
-                {new Date(dateKey + 'T00:00:00').toLocaleDateString('fr-FR', {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long',
-                })}
+                {formatCalendarDate(dateKey, cinemaTimezone)}
               </Text>
               <View style={styles.timesRow}>
                 {grouped[dateKey]
-                  .sort((a, b) => a.showTime.localeCompare(b.showTime))
+                  .slice()
+                  .sort((a, b) => compareShowTimes(a.showTime, b.showTime))
                   .map((screening) => (
-                    <View key={screening.id} style={styles.timeChip}>
-                      <MaterialIcons name="access-time" size={14} color="#e2beba" />
-                      <Text style={styles.timeChipText}>{screening.showTime}</Text>
+                    <View key={screening.id} style={styles.screeningRow}>
+                      <View style={styles.timeChip}>
+                        <MaterialIcons name="access-time" size={14} color="#e2beba" />
+                        <Text style={styles.timeChipText}>{screening.showTime}</Text>
+                      </View>
+                      <View style={styles.screeningActions}>
+                        <TouchableOpacity
+                          style={styles.actionButton}
+                          onPress={() => openEditModal(screening)}
+                          activeOpacity={0.8}
+                          disabled={isUpdatingScreening || isDeletingScreening}
+                        >
+                          {isUpdatingScreening && updatingScreeningId === screening.id ? (
+                            <ActivityIndicator size="small" color="#ffb4ac" />
+                          ) : (
+                            <MaterialIcons name="edit" size={16} color="#ffb4ac" />
+                          )}
+                          <Text style={styles.actionButtonText}>Modifier</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.deleteActionButton]}
+                          onPress={() => confirmDelete(screening)}
+                          activeOpacity={0.8}
+                          disabled={isUpdatingScreening || isDeletingScreening}
+                        >
+                          {isDeletingScreening && deletingScreeningId === screening.id ? (
+                            <ActivityIndicator size="small" color="#ffb4ac" />
+                          ) : (
+                            <MaterialIcons name="delete-outline" size={16} color="#ffb4ac" />
+                          )}
+                          <Text style={styles.actionButtonText}>Supprimer</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   ))}
               </View>
@@ -269,6 +472,99 @@ export default function ManageScreeningsScreen({
           ))
         )}
       </ScrollView>
+
+      <Modal
+        animationType="slide"
+        transparent
+        visible={editModalVisible && editScreening !== null}
+        onRequestClose={closeEditModal}
+        statusBarTranslucent
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View
+              style={[styles.modalHeader, { paddingTop: insets.top + 12 }]}
+            >
+              <View style={styles.topBarSpacer} />
+              <View style={styles.modalTitleBlock}>
+                <Text style={styles.modalTitle}>Modifier la séance</Text>
+                <Text style={styles.modalSubtitle} numberOfLines={1}>{movie.title}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={closeEditModal}
+                activeOpacity={0.8}
+                disabled={isUpdatingScreening}
+              >
+                <MaterialIcons name="close" size={24} color="#e5e2e1" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.editModalContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.field}>
+                <Text style={styles.label}>Date</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editDate}
+                  onChangeText={setEditDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#666"
+                  autoCapitalize="none"
+                  editable={!isUpdatingScreening}
+                />
+              </View>
+
+              <View style={styles.field}>
+                <Text style={styles.label}>Créneau officiel</Text>
+                <View style={styles.slots}>
+                  {(config?.screeningSlots ?? []).map((slot) => (
+                    <TouchableOpacity
+                      key={slot}
+                      style={[styles.slot, editSlot === slot && styles.slotSelected]}
+                      onPress={() => setEditSlot((previous) => (previous === slot ? null : slot))}
+                      activeOpacity={0.8}
+                      disabled={isUpdatingScreening}
+                    >
+                      <Text style={[styles.slotText, editSlot === slot && styles.slotTextSelected]}>
+                        {slot}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {updateScreeningError ? (
+                <Text style={styles.serverError}>{updateScreeningError}</Text>
+              ) : null}
+              {isEditDateTimePast ? (
+                <Text style={styles.pastWarning}>
+                  Impossible de modifier une séance dans le passé.
+                </Text>
+              ) : null}
+
+              <TouchableOpacity
+                style={[styles.addButton, (!canSaveEdit || isUpdatingScreening) && styles.addButtonDisabled]}
+                onPress={handleEdit}
+                activeOpacity={0.9}
+                disabled={!canSaveEdit || isUpdatingScreening}
+              >
+                {isUpdatingScreening ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <MaterialIcons name="save" size={20} color="#fff" />
+                    <Text style={styles.addButtonText}>Enregistrer les modifications</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -437,5 +733,100 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     fontSize: 14,
     color: '#e5e2e1',
+  },
+  screeningRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  screeningActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,180,172,0.25)',
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+  },
+  deleteActionButton: {
+    borderColor: 'rgba(255,180,172,0.18)',
+  },
+  actionButtonText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 11,
+    color: '#ffb4ac',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+  modalSheet: {
+    maxHeight: '90%',
+    backgroundColor: '#171616',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  modalTitleBlock: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  modalTitle: {
+    fontFamily: 'EBGaramond-SemiBold',
+    fontSize: 22,
+    color: '#e5e2e1',
+  },
+  modalSubtitle: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: '#aa8986',
+    marginTop: 3,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editModalContent: {
+    padding: 20,
+    paddingBottom: 8,
+  },
+  serverError: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#ffb4ac',
+    marginBottom: 12,
+  },
+  pastWarning: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#d8aaa4',
+    marginTop: 2,
+    marginBottom: 8,
   },
 });

@@ -5,7 +5,9 @@ export type ProgrammeMovie = { movie: Movie; screenings: Screening[] };
 
 export function getUniqueScreeningsForDate(
   movie: Movie,
-  dateString: string
+  dateString: string,
+  timezone?: string,
+  now = new Date()
 ): Screening[] {
   const seenIds = new Set<number>();
   const seenTimes = new Set<string>();
@@ -13,7 +15,8 @@ export function getUniqueScreeningsForDate(
   return (movie.screenings ?? [])
     .filter(
       (screening) =>
-        toISODate(screening.date) === dateString && isScreeningInFuture(screening)
+        toISODate(screening.date) === dateString
+        && isScreeningInFuture(screening, now, timezone)
     )
     .sort((a, b) => compareShowTimes(a.showTime, b.showTime))
     .filter((screening) => {
@@ -24,9 +27,14 @@ export function getUniqueScreeningsForDate(
     });
 }
 
-export function getProgrammeMovies(movies: Movie[], dateString: string): ProgrammeMovie[] {
+export function getProgrammeMovies(
+  movies: Movie[],
+  dateString: string,
+  timezone?: string,
+  now = new Date()
+): ProgrammeMovie[] {
   return movies.reduce<ProgrammeMovie[]>((result, movie) => {
-    const screenings = getUniqueScreeningsForDate(movie, dateString);
+    const screenings = getUniqueScreeningsForDate(movie, dateString, timezone, now);
     if (screenings.length > 0) result.push({ movie, screenings });
     return result;
   }, []);

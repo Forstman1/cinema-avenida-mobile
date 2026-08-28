@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
-import { loginRequest, signupRequest } from '../api/auth';
+import { setUnauthorizedHandler } from '../api/api';
 import { getApiErrorDetails, getApiErrorMessage } from '../api/errors';
+import { AuthServiceInstance } from '../services/AuthService';
 import type { AuthResult, User } from '../types';
 
 export const AUTH_TOKEN_STORAGE_KEY = 'token';
@@ -120,7 +121,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   login: async (email, password) => {
     const operationVersion = ++authOperationVersion;
     try {
-      const { token, user } = await loginRequest({ email, password });
+      const { token, user } = await AuthServiceInstance.login({ email, password });
 
       if (!token || !isStoredUser(user)) {
         return {
@@ -146,7 +147,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   signup: async (name, email, password) => {
     try {
-      await signupRequest({ name, email, password });
+      await AuthServiceInstance.signup({ name, email, password });
       return { success: true };
     } catch (error: unknown) {
       return {
@@ -169,3 +170,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 }));
+
+// Keep authentication state in sync when the centralized API client receives
+// a 401 for a request made with an existing token.
+setUnauthorizedHandler(() => useAuthStore.getState().logout());

@@ -25,7 +25,7 @@ export type MainTabParamList = {
 
 export type RootStackParamList = {
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
-  MovieDetails: { movieId: number; screening?: Screening; initialDate?: ISODateString };
+  MovieDetails: { movieId: number; initialDate?: ISODateString };
   Screenings: { movie: Movie; initialDate?: ISODateString; initialScreeningId?: number };
   SeatMap: { movie: Movie; screening: Screening };
   Payment: { movie: MovieReference; screening: ScreeningReference; reservation: Reservation; seats: Seat[] };

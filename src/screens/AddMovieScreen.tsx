@@ -16,7 +16,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { getApiErrorMessage } from '../api/errors';
-import { getRawMovieById } from '../api/movies';
+import { MovieServiceInstance } from '../services/MovieService';
 import { useAdminMoviesStore } from '../store/adminMoviesStore';
 import type { RootStackParamList } from '../types/navigation';
 import type { AddMovieScreenProps } from '../types/navigation';
@@ -48,7 +48,7 @@ export default function AddMovieScreen({ route }: AddMovieScreenProps) {
   useEffect(() => {
     if (!editMovie?.id) return;
     let cancelled = false;
-    getRawMovieById(editMovie.id)
+    MovieServiceInstance.getRawMovieById(editMovie.id)
       .then((movie) => {
         if (cancelled) return;
         setTitle(movie.title);

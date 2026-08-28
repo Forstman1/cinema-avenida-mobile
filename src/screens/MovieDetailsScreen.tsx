@@ -175,7 +175,7 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
           <Text style={styles.bottomBarLabel}>PROCHAINE SÉANCE</Text>
           <Text style={styles.bottomBarTime}>
             {nextScreening
-              ? `${formatScreeningDate(nextScreening.date)}, ${nextScreening.showTime}`
+              ? `${formatScreeningDate(nextScreening.date, cinemaTimezone, now)}, ${nextScreening.showTime}`
               : 'Aucune séance prévue'}
           </Text>
         </View>

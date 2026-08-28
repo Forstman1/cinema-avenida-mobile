@@ -15,6 +15,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import NativeQRCode from '../components/NativeQRCode';
 import { useAuthStore } from '../store/authStore';
 import { useBookingsStore } from '../store/bookingsStore';
+import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 import { formatScreeningDate } from '../utils/date';
 import type { ReservationStatus, SeatCategory, TicketStatus } from '../types';
 import type { RootStackParamList } from '../types/navigation';
@@ -46,6 +47,7 @@ export default function TicketScreen({ route }: TicketScreenProps) {
   const navigation = useNavigation<TicketNavigationProp>();
   const insets = useSafeAreaInsets();
   const currentUserId = useAuthStore((state) => state.user?.id ?? null);
+  const cinemaTimezone = useCinemaConfigStore((state) => state.config?.timezone);
   const storedBooking = useBookingsStore(
     (state) => state.selectedBooking ?? state.lastCompletedBooking
   );
@@ -111,7 +113,7 @@ export default function TicketScreen({ route }: TicketScreenProps) {
           <View style={styles.infoRow}>
             <View style={styles.infoBlock}>
               <Text style={styles.infoLabel}>DATE</Text>
-              <Text style={styles.infoValue}>{formatScreeningDate(screening.date)}</Text>
+              <Text style={styles.infoValue}>{formatScreeningDate(screening.date, cinemaTimezone)}</Text>
             </View>
             <View style={[styles.infoBlock, styles.infoBlockRight]}>
               <Text style={styles.infoLabel}>HEURE</Text>

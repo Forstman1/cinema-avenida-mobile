@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
-import { getAdminDashboard } from '../api/admin';
 import { getApiErrorMessage } from '../api/errors';
+import { AdminServiceInstance } from '../services/AdminService';
 import type { AdminDashboard as AdminDashboardData } from '../types';
 import { useAuthStore } from './authStore';
 
@@ -47,7 +47,7 @@ export const useAdminDashboardStore = create<AdminDashboardStore>((set, get) => 
       });
 
       try {
-        const dashboard = await getAdminDashboard();
+        const dashboard = await AdminServiceInstance.getAdminDashboard();
 
         if (requestGeneration !== dashboardGeneration || !isAdmin()) {
           return;

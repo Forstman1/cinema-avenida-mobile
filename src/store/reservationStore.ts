@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 
 import { getApiErrorMessage } from '../api/errors';
-import { payReservation as payReservationRequest } from '../api/payments';
-import { getMyReservations } from '../api/reservations';
-import { getSeatsByScreeningId, lockSeats as lockSeatsRequest } from '../api/seats';
+import { PaymentServiceInstance } from '../services/PaymentService';
+import { ReservationServiceInstance } from '../services/ReservationService';
+import { SeatServiceInstance } from '../services/SeatService';
+import { getReservationLockExpiry, RESERVATION_EXPIRED_MESSAGE } from '../utils/reservation-lock';
 import type { PayReservationResponse, Reservation, Seat, Ticket } from '../types';
 
 export interface LoadSeatsOptions {
@@ -17,7 +18,7 @@ export interface ReservationStore {
   reservationId: number | null;
   pendingReservation: Reservation | null;
   confirmedReservation: PayReservationResponse | null;
-  lockedUntil: string | null;
+  lockedUntil: number | null;
   paymentResult: PayReservationResponse | null;
   ticket: Ticket | null;
   isLoadingSeats: boolean;
@@ -33,35 +34,16 @@ export interface ReservationStore {
   toggleSeat: (seatId: number) => void;
   deselectSeats: (seatIds: number[]) => void;
   clearReservationDraft: () => void;
+  expirePendingReservation: (screeningId: number | null) => Promise<void>;
   lockSelectedSeats: (screeningId: number) => Promise<Reservation>;
   payReservation: () => Promise<PayReservationResponse>;
   resetReservationFlow: () => void;
-}
-
-function getLockedUntil(reservation: Reservation | null): string | null {
-  const values = (reservation?.reservationSeats ?? [])
-    .map((reservationSeat) => reservationSeat.lockedUntil)
-    .filter(
-      (value): value is string =>
-        typeof value === 'string' && value.length > 0 && !Number.isNaN(Date.parse(value))
-    );
-
-  if (values.length === 0) return null;
-  const [firstValue, ...remainingValues] = values;
-  return remainingValues.reduce(
-    (latest, value) => (Date.parse(value) > Date.parse(latest) ? value : latest),
-    firstValue
-  );
 }
 
 function getReservationSeatIds(reservation: Reservation): number[] {
   return (reservation.reservationSeats ?? [])
     .map((reservationSeat) => reservationSeat.seatId)
     .filter((seatId) => Number.isInteger(seatId));
-}
-
-function hasActiveLock(lockedUntil: string | null): boolean {
-  return Boolean(lockedUntil && Date.parse(lockedUntil) > Date.now());
 }
 
 function emptyReservationState() {
@@ -135,7 +117,7 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
     let request: Promise<void> | null = null;
     request = (async () => {
       try {
-        const seats = await getSeatsByScreeningId(screeningId);
+        const seats = await SeatServiceInstance.getSeatsByScreeningId(screeningId);
         if (
           generation !== reservationFlowGeneration ||
           get().currentScreeningId !== screeningId ||
@@ -168,9 +150,8 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
       }
     })();
 
-    const startedRequest = request as Promise<void>;
-    inFlightSeats.set(screeningId, startedRequest);
-    return startedRequest;
+    inFlightSeats.set(screeningId, request);
+    return request;
   },
 
   loadPendingReservation: async (screeningId) => {
@@ -187,7 +168,7 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
     let request: Promise<void> | null = null;
     request = (async () => {
       try {
-        const reservations = await getMyReservations();
+        const reservations = await ReservationServiceInstance.getMyReservations();
         if (
           generation !== reservationFlowGeneration ||
           get().currentScreeningId !== screeningId ||
@@ -198,15 +179,17 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
           if (reservation.status !== 'EN_ATTENTE' || reservation.screening?.id !== screeningId) {
             return false;
           }
-          return hasActiveLock(getLockedUntil(reservation));
+          const lockExpiry = getReservationLockExpiry(reservation);
+          return lockExpiry !== null && lockExpiry > Date.now();
         }) ?? null;
 
         if (pending) {
+          const lockExpiry = getReservationLockExpiry(pending);
           set({
             pendingReservation: pending,
             reservationId: pending.id,
             selectedSeatIds: getReservationSeatIds(pending),
-            lockedUntil: getLockedUntil(pending),
+            lockedUntil: lockExpiry,
             reservationError: null,
           });
         } else {
@@ -229,9 +212,8 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
       }
     })();
 
-    const startedRequest = request as Promise<void>;
-    inFlightPendingReservations.set(screeningId, startedRequest);
-    return startedRequest;
+    inFlightPendingReservations.set(screeningId, request);
+    return request;
   },
 
   hydrateReservation: (reservation, seats = []) => {
@@ -251,14 +233,15 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
         : seats.map((seat) => seat.id),
       reservationId: reservation.id,
       pendingReservation: reservation,
-      lockedUntil: getLockedUntil(reservation),
+      lockedUntil: getReservationLockExpiry(reservation),
       reservationError: null,
     });
   },
 
   toggleSeat: (seatId) => {
     const state = get();
-    if (hasActiveLock(state.lockedUntil) || state.isLocking) return;
+    const lockExpiry = getReservationLockExpiry(state.pendingReservation);
+    if ((lockExpiry !== null && lockExpiry > Date.now()) || state.isLocking) return;
 
     const seat = state.seats.find((candidate) => candidate.id === seatId);
     if (!seat || seat.status !== 'LIBRE') return;
@@ -296,6 +279,21 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
     });
   },
 
+  expirePendingReservation: async (screeningId) => {
+    const state = get();
+    const hasMatchingDraft =
+      screeningId !== null &&
+      state.currentScreeningId === screeningId &&
+      (state.pendingReservation !== null || state.lockedUntil !== null);
+
+    if (hasMatchingDraft) get().clearReservationDraft();
+    if (screeningId !== null) {
+      await get().loadSeats(screeningId, { showLoading: false });
+      await get().loadPendingReservation(screeningId);
+    }
+    set({ reservationError: RESERVATION_EXPIRED_MESSAGE });
+  },
+
   lockSelectedSeats: async (screeningId) => {
     const state = get();
     if (state.isLocking || state.isPaying) {
@@ -304,7 +302,8 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
     if (state.currentScreeningId !== screeningId) {
       throw new Error('La séance sélectionnée n\'est plus disponible.');
     }
-    if (hasActiveLock(state.lockedUntil)) {
+    const lockExpiry = getReservationLockExpiry(state.pendingReservation);
+    if (lockExpiry !== null && lockExpiry > Date.now()) {
       throw new Error('Vous avez déjà une réservation en cours.');
     }
     if (state.selectedSeatIds.length === 0) {
@@ -325,7 +324,7 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
     const generation = reservationFlowGeneration;
     set({ isLocking: true, reservationError: null });
     try {
-      const reservation = await lockSeatsRequest({ screeningId, seatIds: selectedSeatIds });
+      const reservation = await SeatServiceInstance.lockSeats({ screeningId, seatIds: selectedSeatIds });
       if (
         generation !== reservationFlowGeneration ||
         get().currentScreeningId !== screeningId
@@ -335,7 +334,7 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
       set({
         reservationId: reservation.id,
         pendingReservation: reservation,
-        lockedUntil: getLockedUntil(reservation),
+        lockedUntil: getReservationLockExpiry(reservation),
         reservationError: null,
       });
       return reservation;
@@ -361,15 +360,17 @@ export const useReservationStore = create<ReservationStore>((set, get) => ({
       set({ reservationError: error.message });
       throw error;
     }
-    if (!hasActiveLock(state.lockedUntil)) {
-      const error = new Error('Réservation expirée.');
+    const lockExpiry = getReservationLockExpiry(state.pendingReservation);
+    if (lockExpiry === null || lockExpiry <= Date.now()) {
+      await get().expirePendingReservation(state.pendingReservation?.screening?.id ?? state.currentScreeningId);
+      const error = new Error(RESERVATION_EXPIRED_MESSAGE);
       set({ reservationError: error.message });
       throw error;
     }
 
     set({ isPaying: true, reservationError: null });
     try {
-      const result = await payReservationRequest(reservationId);
+      const result = await PaymentServiceInstance.payReservation(reservationId);
       if (generation !== reservationFlowGeneration) {
         throw new Error('La session de réservation a été réinitialisée.');
       }

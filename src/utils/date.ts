@@ -1,7 +1,10 @@
 import type { ISODateString, Reservation, Screening, TimeString } from '../types';
 
-const WEEKDAYS = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'];
-const MONTHS = ['Jan.', 'Fév.', 'Mar.', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'];
+export interface CalendarDateParts {
+  year: number;
+  month: number;
+  day: number;
+}
 
 function getDateTimePartsInTimezone(
   date: Date,
@@ -29,40 +32,78 @@ function getDateTimePartsInTimezone(
   }
 }
 
-function getScreeningDateTimeValue(screening: Screening, timezone?: string): Date | null {
-  if (!screening.date) return null;
+function getEffectiveTimezone(timezone?: string): string {
+  if (timezone && getDateTimePartsInTimezone(new Date(0), timezone)) return timezone;
+  return 'UTC';
+}
 
-  const dateString = toISODate(screening.date);
-  const date = parseLocalDate(dateString);
-  if (!date) return null;
+function createUtcDate(
+  year: number,
+  month: number,
+  day: number,
+  hours = 0,
+  minutes = 0
+): Date {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  date.setUTCHours(hours, minutes, 0, 0);
+  return date;
+}
 
-  const normalizedTime = toHHMM(screening.showTime);
-  if (!/^\d{2}:\d{2}$/.test(normalizedTime)) return null;
-  const [year, month, day] = dateString.split('-').map(Number);
+export function getCalendarDateParts(dateString: string): CalendarDateParts | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(toISODate(dateString));
+  if (!match) return null;
+
+  const [, yearString, monthString, dayString] = match;
+  const parts = {
+    year: Number(yearString),
+    month: Number(monthString),
+    day: Number(dayString),
+  };
+  const date = createUtcDate(parts.year, parts.month, parts.day);
+
+  return date.getUTCFullYear() === parts.year
+    && date.getUTCMonth() === parts.month - 1
+    && date.getUTCDate() === parts.day
+    ? parts
+    : null;
+}
+
+function getInstantForWallClock(
+  dateString: string,
+  timeString: string,
+  timezone?: string
+): Date | null {
+  const dateParts = getCalendarDateParts(dateString);
+  const normalizedTime = toHHMM(timeString);
+  if (!dateParts || !/^\d{2}:\d{2}$/.test(normalizedTime)) return null;
+
   const [hours, minutes] = normalizedTime.split(':').map(Number);
+  if (hours > 23 || minutes > 59) return null;
 
-  if (!timezone) {
-    date.setHours(hours, minutes, 0, 0);
-    return date;
-  }
-
-  // Treat the API date/time as a wall-clock value in the cinema timezone,
-  // then resolve it to the corresponding instant for accurate hour checks.
-  const wallTimeAsUtc = Date.UTC(year, month - 1, day, hours, minutes);
+  const wallTimeAsUtc = createUtcDate(
+    dateParts.year,
+    dateParts.month,
+    dateParts.day,
+    hours,
+    minutes
+  ).getTime();
+  const effectiveTimezone = getEffectiveTimezone(timezone);
   let timestamp = wallTimeAsUtc;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const parts = getDateTimePartsInTimezone(new Date(timestamp), timezone);
-    if (!parts) {
-      date.setHours(hours, minutes, 0, 0);
-      return date;
-    }
-    const displayedWallTime = Date.UTC(
+
+  // Resolve the API wall-clock value to an instant in the cinema timezone.
+  // A few iterations cover timezone offsets and daylight-saving transitions.
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const parts = getDateTimePartsInTimezone(new Date(timestamp), effectiveTimezone);
+    if (!parts) return null;
+
+    const displayedWallTime = createUtcDate(
       Number(parts.year),
-      Number(parts.month) - 1,
+      Number(parts.month),
       Number(parts.day),
       Number(parts.hour),
       Number(parts.minute)
-    );
+    ).getTime();
     const nextTimestamp = wallTimeAsUtc - (displayedWallTime - timestamp);
     if (nextTimestamp === timestamp) break;
     timestamp = nextTimestamp;
@@ -71,58 +112,103 @@ function getScreeningDateTimeValue(screening: Screening, timezone?: string): Dat
   return new Date(timestamp);
 }
 
-function getLocalDateTimeKey(date: Date): string {
-  const year = String(date.getFullYear()).padStart(4, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-
-function getDateTimeKeyInTimezone(date: Date, timezone?: string): string {
-  if (!timezone) return getLocalDateTimeKey(date);
-
-  const values = getDateTimePartsInTimezone(date, timezone);
-  return values
-    ? `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`
-    : getLocalDateTimeKey(date);
-}
-
-function getScreeningDateTimeKey(screening: Screening): string | null {
-  const date = toISODate(screening.date);
-  const time = toHHMM(screening.showTime);
-  if (!parseLocalDate(date) || !/^\d{2}:\d{2}$/.test(time)) return null;
-  return `${date}T${time}`;
-}
-
-export function getScreeningDateTime(reservation: Reservation, timezone?: string): Date | null {
-  return reservation.screening
-    ? getScreeningDateTimeValue(reservation.screening, timezone)
-    : null;
-}
-
-export function formatScreeningDate(dateString: string): string {
-  const date = parseLocalDate(dateString);
-  if (!date) return dateString;
-
-  if (toISODateString(date) === getTodayDateString()) {
-    return 'Aujourd\'hui';
+export function getTodayDateString(
+  timezone?: string,
+  now = new Date()
+): ISODateString {
+  const parts = getDateTimePartsInTimezone(now, getEffectiveTimezone(timezone));
+  if (!parts) {
+    const fallback = new Date(now);
+    return `${fallback.getUTCFullYear()}-${String(fallback.getUTCMonth() + 1).padStart(2, '0')}-${String(fallback.getUTCDate()).padStart(2, '0')}` as ISODateString;
   }
-
-  const dayName = WEEKDAYS[date.getDay()];
-  const dayNumber = date.getDate();
-  const month = MONTHS[date.getMonth()];
-
-  return `${dayName} ${dayNumber} ${month}`;
+  return `${parts.year}-${parts.month}-${parts.day}` as ISODateString;
 }
 
-export function getTodayDateString(): ISODateString {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}` as ISODateString;
+export function getWeekdayIndex(dateString: string): number {
+  const parts = getCalendarDateParts(dateString);
+  if (!parts) return -1;
+  return createUtcDate(parts.year, parts.month, parts.day).getUTCDay();
+}
+
+export function addCalendarDays(dateString: string, days: number): ISODateString {
+  const parts = getCalendarDateParts(dateString);
+  if (!parts) return dateString as ISODateString;
+
+  const date = createUtcDate(parts.year, parts.month, parts.day);
+  date.setUTCDate(date.getUTCDate() + days);
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}` as ISODateString;
+}
+
+export function getStartOfWeekDateString(
+  timezone?: string,
+  now = new Date()
+): ISODateString {
+  const today = getTodayDateString(timezone, now);
+  const weekday = getWeekdayIndex(today);
+  const daysFromMonday = weekday === 0 ? -6 : 1 - weekday;
+  return addCalendarDays(today, daysFromMonday);
+}
+
+export function getRemainingDaysOfWeek(
+  timezone?: string,
+  now = new Date()
+): ISODateString[] {
+  const today = getTodayDateString(timezone, now);
+  const weekday = getWeekdayIndex(today);
+  const daysUntilSunday = weekday === 0 ? 0 : 7 - weekday;
+  return Array.from({ length: daysUntilSunday + 1 }, (_, index) =>
+    addCalendarDays(today, index)
+  );
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+export function formatCalendarDate(
+  dateString: string,
+  timezone?: string,
+  includeYear = false
+): string {
+  const normalized = toISODate(dateString);
+  const parts = getCalendarDateParts(normalized);
+  if (!parts) return dateString;
+
+  const instant = getInstantForWallClock(normalized, '12:00', timezone);
+  if (!instant) return normalized;
+
+  return capitalize(new Intl.DateTimeFormat('fr-FR', {
+    timeZone: getEffectiveTimezone(timezone),
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: includeYear ? 'numeric' : undefined,
+  }).format(instant));
+}
+
+export function formatScreeningDate(
+  dateString: string,
+  timezone?: string,
+  now = new Date()
+): string {
+  const normalized = toISODate(dateString);
+  if (!getCalendarDateParts(normalized)) return dateString;
+  if (normalized === getTodayDateString(timezone, now)) return 'Aujourd\'hui';
+
+  const instant = getInstantForWallClock(normalized, '12:00', timezone);
+  if (!instant) return normalized;
+
+  const formatted = new Intl.DateTimeFormat('fr-FR', {
+    timeZone: getEffectiveTimezone(timezone),
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).formatToParts(instant);
+  const values: Record<string, string> = {};
+  formatted.forEach((part) => {
+    values[part.type] = part.value;
+  });
+  return `${capitalize(values.weekday ?? '')} ${values.day ?? ''} ${values.month ?? ''}`.trim();
 }
 
 export function toISODate(dateString: string): ISODateString {
@@ -134,24 +220,54 @@ export function toHHMM(timeString: string): TimeString {
   return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}` as TimeString;
 }
 
-/** Parse an API calendar date without allowing the runtime to apply a UTC offset. */
+/** Parse an API calendar date for date-picker values without parsing an ISO date as UTC. */
 export function parseLocalDate(dateString: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(toISODate(dateString));
-  if (!match) return null;
+  const parts = getCalendarDateParts(dateString);
+  if (!parts) return null;
 
-  const [, yearString, monthString, dayString] = match;
-  const date = new Date(Number(yearString), Number(monthString) - 1, Number(dayString));
+  const date = new Date(parts.year, parts.month - 1, parts.day);
   date.setHours(0, 0, 0, 0);
+  return date.getFullYear() === parts.year
+    && date.getMonth() === parts.month - 1
+    && date.getDate() === parts.day
+    ? date
+    : null;
+}
 
-  if (
-    date.getFullYear() !== Number(yearString) ||
-    date.getMonth() !== Number(monthString) - 1 ||
-    date.getDate() !== Number(dayString)
-  ) {
-    return null;
-  }
+export function getScreeningDateTime(
+  reservation: Reservation,
+  timezone?: string
+): Date | null {
+  return reservation.screening
+    ? getScreeningInstant(reservation.screening, timezone)
+    : null;
+}
 
-  return date;
+export function getScreeningInstant(
+  screening: Screening,
+  timezone?: string
+): Date | null {
+  return getInstantForWallClock(toISODate(screening.date), screening.showTime, timezone);
+}
+
+export function compareScreeningDateTime(
+  screening: Screening,
+  now = new Date(),
+  timezone?: string
+): number {
+  const screeningInstant = getScreeningInstant(screening, timezone);
+  return screeningInstant ? screeningInstant.getTime() - now.getTime() : -1;
+}
+
+/** Check a calendar date and official show time against the current instant. */
+export function isScreeningDateTimeInPast(
+  dateString: string,
+  showTime: string,
+  timezone?: string,
+  now = new Date()
+): boolean {
+  const screeningInstant = getInstantForWallClock(dateString, showTime, timezone);
+  return screeningInstant !== null && screeningInstant.getTime() <= now.getTime();
 }
 
 export function isScreeningInFuture(
@@ -159,9 +275,7 @@ export function isScreeningInFuture(
   now = new Date(),
   timezone?: string
 ): boolean {
-  const screeningDateTimeKey = getScreeningDateTimeKey(screening);
-  if (!screeningDateTimeKey) return false;
-  return screeningDateTimeKey > getDateTimeKeyInTimezone(now, timezone);
+  return compareScreeningDateTime(screening, now, timezone) > 0;
 }
 
 export function formatDuration(minutesValue: number): string {
@@ -179,9 +293,7 @@ export function formatDuration(minutesValue: number): string {
 function compareScreeningsByDateTime(a: Screening, b: Screening): number {
   const dateA = toISODate(a.date);
   const dateB = toISODate(b.date);
-  if (dateA !== dateB) {
-    return dateA.localeCompare(dateB);
-  }
+  if (dateA !== dateB) return dateA.localeCompare(dateB);
   return compareShowTimes(a.showTime, b.showTime);
 }
 
@@ -211,24 +323,12 @@ export function getNextScreening(
   return [...upcoming].sort(compareScreeningsByDateTime)[0] ?? null;
 }
 
-export function toISODateString(date: Date): ISODateString {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}` as ISODateString;
-}
-
-export function getRemainingDaysOfWeek(fromDate = new Date()): Date[] {
-  const days: Date[] = [];
-  const today = new Date(fromDate);
-  today.setHours(0, 0, 0, 0);
-  const currentDay = today.getDay();
-  const daysUntilSunday = currentDay === 0 ? 0 : 7 - currentDay;
-  for (let i = 0; i <= daysUntilSunday; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    d.setHours(0, 0, 0, 0);
-    days.push(d);
-  }
-  return days;
+export function getMillisecondsUntilNextCinemaDay(
+  timezone?: string,
+  now = new Date()
+): number {
+  const tomorrow = addCalendarDays(getTodayDateString(timezone, now), 1);
+  const nextMidnight = getInstantForWallClock(tomorrow, '00:00', timezone);
+  if (!nextMidnight) return 60_000;
+  return Math.max(1_000, nextMidnight.getTime() - now.getTime() + 1_000);
 }

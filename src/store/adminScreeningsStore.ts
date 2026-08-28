@@ -1,12 +1,17 @@
 import { create } from 'zustand';
-import { getApiErrorDetails, getApiErrorMessage } from '../api/errors';
-
 import {
-  createScreening as createScreeningRequest,
-  getScreeningsByDate,
-  getScreeningsByMovieId,
-} from '../api/movies';
-import type { ISODateString, Screening, ScreeningRequest } from '../types';
+  getApiErrorDetails,
+  getApiErrorMessage,
+  getScreeningMutationErrorMessage,
+} from '../api/errors';
+
+import { MovieServiceInstance } from '../services/MovieService';
+import type {
+  ISODateString,
+  Screening,
+  ScreeningRequest,
+  UpdateScreeningRequest,
+} from '../types';
 import { compareShowTimes, toISODate } from '../utils/date';
 
 export interface FetchScreeningsOptions {
@@ -29,14 +34,27 @@ export interface AdminScreeningsStore extends NormalizedScreenings {
   isCreatingScreening: boolean;
   createScreeningError: string | null;
   lastCreatedScreening: Screening | null;
+  isUpdatingScreening: boolean;
+  updatingScreeningId: number | null;
+  updateScreeningError: string | null;
+  isDeletingScreening: boolean;
+  deletingScreeningId: number | null;
+  deleteScreeningError: string | null;
   fetchScreeningsByDate: (date: ISODateString, options?: FetchScreeningsOptions) => Promise<Screening[]>;
   refreshScreeningsByDate: (date: ISODateString) => Promise<Screening[]>;
   fetchScreeningsByMovieId: (movieId: number, options?: FetchScreeningsOptions) => Promise<Screening[]>;
   refreshScreeningsByMovieId: (movieId: number) => Promise<Screening[]>;
   createScreening: (payload: ScreeningRequest) => Promise<Screening | null>;
+  updateScreening: (
+    id: UpdateScreeningRequest['id'],
+    payload: UpdateScreeningRequest['payload'],
+  ) => Promise<Screening | null>;
+  deleteScreening: (id: number) => Promise<boolean>;
   invalidateDate: (date: ISODateString) => void;
   invalidateMovie: (movieId: number) => void;
   clearCreateError: () => void;
+  clearUpdateError: () => void;
+  clearDeleteError: () => void;
   clearScreenings: () => void;
   reset: () => void;
 }
@@ -68,17 +86,28 @@ function removeId(ids: number[] | undefined, id: number): number[] {
 
 function detachScreening(state: NormalizedScreenings, screeningId: number): void {
   const existing = state.screeningsById[screeningId];
-  if (!existing) return;
+  if (existing) {
+    const dateKey = getDateKey(existing.date);
+    const movieId = existing.movieId;
+    const dateIds = removeId(state.screeningIdsByDate[dateKey], screeningId);
+    const movieIds = removeId(state.screeningIdsByMovieId[movieId], screeningId);
 
-  const dateKey = getDateKey(existing.date);
-  const movieId = existing.movieId;
-  const dateIds = removeId(state.screeningIdsByDate[dateKey], screeningId);
-  const movieIds = removeId(state.screeningIdsByMovieId[movieId], screeningId);
-
-  if (dateIds.length > 0) state.screeningIdsByDate[dateKey] = dateIds;
-  else delete state.screeningIdsByDate[dateKey];
-  if (movieIds.length > 0) state.screeningIdsByMovieId[movieId] = movieIds;
-  else delete state.screeningIdsByMovieId[movieId];
+    if (dateIds.length > 0) state.screeningIdsByDate[dateKey] = dateIds;
+    else delete state.screeningIdsByDate[dateKey];
+    if (movieIds.length > 0) state.screeningIdsByMovieId[movieId] = movieIds;
+    else delete state.screeningIdsByMovieId[movieId];
+  } else {
+    Object.entries(state.screeningIdsByDate).forEach(([dateKey, ids]) => {
+      const nextIds = removeId(ids, screeningId);
+      if (nextIds.length > 0) state.screeningIdsByDate[dateKey] = nextIds;
+      else delete state.screeningIdsByDate[dateKey];
+    });
+    Object.entries(state.screeningIdsByMovieId).forEach(([movieId, ids]) => {
+      const nextIds = removeId(ids, screeningId);
+      if (nextIds.length > 0) state.screeningIdsByMovieId[Number(movieId)] = nextIds;
+      else delete state.screeningIdsByMovieId[Number(movieId)];
+    });
+  }
   delete state.screeningsById[screeningId];
 }
 
@@ -94,6 +123,15 @@ function attachScreening(state: NormalizedScreenings, screening: Screening): voi
     ...(state.screeningIdsByMovieId[screening.movieId] ?? []),
     screening.id,
   ];
+}
+
+function sortScreeningIds(state: NormalizedScreenings, screening: Screening): void {
+  const dateKey = getDateKey(screening.date);
+  state.screeningIdsByDate[dateKey] = (state.screeningIdsByDate[dateKey] ?? [])
+    .sort((a, b) => compareScreenings(state.screeningsById[a], state.screeningsById[b]));
+  state.screeningIdsByMovieId[screening.movieId] = (
+    state.screeningIdsByMovieId[screening.movieId] ?? []
+  ).sort((a, b) => compareScreenings(state.screeningsById[a], state.screeningsById[b]));
 }
 
 function replaceDate(
@@ -147,6 +185,12 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
   isCreatingScreening: false,
   createScreeningError: null,
   lastCreatedScreening: null,
+  isUpdatingScreening: false,
+  updatingScreeningId: null,
+  updateScreeningError: null,
+  isDeletingScreening: false,
+  deletingScreeningId: null,
+  deleteScreeningError: null,
 
   fetchScreeningsByDate: async (date, { force = true } = {}) => {
     const dateKey = getDateKey(date);
@@ -176,7 +220,7 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
     let request: Promise<Screening[]> | null = null;
     request = (async () => {
       try {
-        const response = await getScreeningsByDate(dateKey);
+        const response = await MovieServiceInstance.getScreeningsByDate(dateKey);
         if (
           generation !== adminScreeningsGeneration ||
           dataVersion !== adminScreeningsDataVersion ||
@@ -260,7 +304,7 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
     let request: Promise<Screening[]> | null = null;
     request = (async () => {
       try {
-        const screenings = await getScreeningsByMovieId(movieId);
+        const screenings = await MovieServiceInstance.getScreeningsByMovieId(movieId);
         if (
           generation !== adminScreeningsGeneration ||
           dataVersion !== adminScreeningsDataVersion ||
@@ -314,7 +358,7 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
     set({ isCreatingScreening: true, createScreeningError: null, lastCreatedScreening: null });
 
     try {
-      const screening = await createScreeningRequest(payload);
+      const screening = await MovieServiceInstance.createScreening(payload);
       if (generation !== adminScreeningsGeneration) return null;
       adminScreeningsDataVersion += 1;
       const normalized = cloneNormalized(get());
@@ -336,6 +380,75 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
     } finally {
       if (generation === adminScreeningsGeneration) {
         set({ isCreatingScreening: false });
+      }
+    }
+  },
+
+  updateScreening: async (id, payload) => {
+    if (get().isUpdatingScreening || get().isDeletingScreening) return null;
+    const generation = adminScreeningsGeneration;
+    adminScreeningsDataVersion += 1;
+    inFlightDateRequests.clear();
+    inFlightMovieRequests.clear();
+    set({
+      isUpdatingScreening: true,
+      updatingScreeningId: id,
+      updateScreeningError: null,
+    });
+
+    try {
+      const screening = await MovieServiceInstance.updateScreening(id, payload);
+      if (generation !== adminScreeningsGeneration) return null;
+
+      adminScreeningsDataVersion += 1;
+      const normalized = cloneNormalized(get());
+      attachScreening(normalized, screening);
+      sortScreeningIds(normalized, screening);
+      set({ ...normalized, updateScreeningError: null });
+      return screening;
+    } catch (error: unknown) {
+      if (generation !== adminScreeningsGeneration) return null;
+      set({
+        updateScreeningError: getScreeningMutationErrorMessage(error, 'update'),
+      });
+      throw error;
+    } finally {
+      if (generation === adminScreeningsGeneration) {
+        set({ isUpdatingScreening: false, updatingScreeningId: null });
+      }
+    }
+  },
+
+  deleteScreening: async (id) => {
+    if (get().isUpdatingScreening || get().isDeletingScreening) return false;
+    const generation = adminScreeningsGeneration;
+    adminScreeningsDataVersion += 1;
+    inFlightDateRequests.clear();
+    inFlightMovieRequests.clear();
+    set({
+      isDeletingScreening: true,
+      deletingScreeningId: id,
+      deleteScreeningError: null,
+    });
+
+    try {
+      await MovieServiceInstance.deleteScreening(id);
+      if (generation !== adminScreeningsGeneration) return false;
+
+      adminScreeningsDataVersion += 1;
+      const normalized = cloneNormalized(get());
+      detachScreening(normalized, id);
+      set({ ...normalized, deleteScreeningError: null });
+      return true;
+    } catch (error: unknown) {
+      if (generation !== adminScreeningsGeneration) return false;
+      set({
+        deleteScreeningError: getScreeningMutationErrorMessage(error, 'delete'),
+      });
+      throw error;
+    } finally {
+      if (generation === adminScreeningsGeneration) {
+        set({ isDeletingScreening: false, deletingScreeningId: null });
       }
     }
   },
@@ -370,6 +483,8 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
   },
 
   clearCreateError: () => set({ createScreeningError: null }),
+  clearUpdateError: () => set({ updateScreeningError: null }),
+  clearDeleteError: () => set({ deleteScreeningError: null }),
 
   clearScreenings: () => {
     adminScreeningsGeneration += 1;
@@ -391,6 +506,12 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
       isCreatingScreening: false,
       createScreeningError: null,
       lastCreatedScreening: null,
+      isUpdatingScreening: false,
+      updatingScreeningId: null,
+      updateScreeningError: null,
+      isDeletingScreening: false,
+      deletingScreeningId: null,
+      deleteScreeningError: null,
     });
   },
 
@@ -414,6 +535,12 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
       isCreatingScreening: false,
       createScreeningError: null,
       lastCreatedScreening: null,
+      isUpdatingScreening: false,
+      updatingScreeningId: null,
+      updateScreeningError: null,
+      isDeletingScreening: false,
+      deletingScreeningId: null,
+      deleteScreeningError: null,
     });
   },
 }));

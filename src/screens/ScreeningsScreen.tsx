@@ -21,48 +21,43 @@ import type { RootStackParamList } from '../types/navigation';
 import type { ScreeningsScreenProps } from '../types/navigation';
 import {
   compareShowTimes,
+  formatCalendarDate,
+  getCalendarDateParts,
   getRemainingDaysOfWeek,
   getTodayDateString,
+  getWeekdayIndex,
   isScreeningInFuture,
-  parseLocalDate,
   toISODate,
-  toISODateString,
 } from '../utils/date';
 import { useMoviesStore } from '../store/moviesStore';
+import { useCinemaConfigStore } from '../store/cinemaConfigStore';
+import { useCinemaDateContext } from '../hooks/useCinemaDateContext';
 
 type ScreeningsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Screenings'>;
 
 const WEEKDAY_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
-const MONTH_NAMES = [
-  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
-];
 const EMPTY_SCREENINGS: Screening[] = [];
-
-function formatSelectedDate(date: Date): string {
-  const weekday = date.toLocaleDateString('fr-FR', { weekday: 'long' });
-  const capitalized = weekday.charAt(0).toUpperCase() + weekday.slice(1);
-  return `${capitalized} ${date.getDate()} ${MONTH_NAMES[date.getMonth()]}`;
-}
 
 export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
   const navigation = useNavigation<ScreeningsNavigationProp>();
   const insets = useSafeAreaInsets();
   const { movie, initialDate, initialScreeningId } = route.params;
+  const cinemaTimezone = useCinemaConfigStore((state) => state.config?.timezone);
+  const dateContextNow = useCinemaDateContext(cinemaTimezone);
 
-  const today = useMemo(() => getTodayDateString(), []);
-  const weekDays = useMemo(
-    () => getRemainingDaysOfWeek(parseLocalDate(today) ?? new Date()),
-    [today]
+  const today = useMemo(
+    () => getTodayDateString(cinemaTimezone, dateContextNow),
+    [cinemaTimezone, dateContextNow]
   );
   const weekDateStrings = useMemo(
-    () => weekDays.map((date) => toISODateString(date)),
-    [weekDays]
+    () => getRemainingDaysOfWeek(cinemaTimezone, dateContextNow),
+    [cinemaTimezone, dateContextNow]
   );
 
   const [selectedDate, setSelectedDate] = useState<ISODateString | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const hasInitializedSelection = useRef(false);
+  const previousDateContext = useRef(`${cinemaTimezone ?? 'UTC'}:${today}`);
   const [hasLoadedScreenings, setHasLoadedScreenings] = useState(false);
   const screenings = useMoviesStore(
     (state) => state.screeningsByMovieId[movie.id] ?? EMPTY_SCREENINGS
@@ -83,7 +78,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
       if (seenScreeningIds.has(screening.id)) return;
 
       const key = toISODate(screening.date);
-      if (!allowedDates.has(key) || !isScreeningInFuture(screening)) return;
+      if (!allowedDates.has(key) || !isScreeningInFuture(screening, dateContextNow, cinemaTimezone)) return;
 
       seenScreeningIds.add(screening.id);
       if (!map[key]) {
@@ -95,7 +90,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
       list.sort((a, b) => compareShowTimes(a.showTime, b.showTime));
     });
     return map;
-  }, [screenings, weekDateStrings]);
+  }, [cinemaTimezone, dateContextNow, screenings, weekDateStrings]);
 
   const daysWithScreenings = useMemo(
     () => weekDateStrings.filter((date) => groupedScreenings[date]?.length > 0),
@@ -105,7 +100,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
   const normalizedInitialDate = useMemo(() => {
     if (!initialDate) return null;
     const normalized = toISODate(initialDate);
-    return parseLocalDate(normalized) ? normalized : null;
+    return getCalendarDateParts(normalized) ? normalized : null;
   }, [initialDate]);
 
   const currentDayScreenings = useMemo(() => {
@@ -118,6 +113,18 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
       setSelectedId(null);
     }
   }, [currentDayScreenings, selectedId]);
+
+  useEffect(() => {
+    const nextDateContext = `${cinemaTimezone ?? 'UTC'}:${today}`;
+    if (previousDateContext.current !== nextDateContext && hasInitializedSelection.current) {
+      const retainedDate = selectedDate && weekDateStrings.includes(selectedDate)
+        ? selectedDate
+        : today;
+      setSelectedDate(retainedDate);
+      setSelectedId(null);
+    }
+    previousDateContext.current = nextDateContext;
+  }, [cinemaTimezone, selectedDate, today, weekDateStrings]);
 
   const fetchScreenings = useCallback(
     (force = false) => loadScreenings(movie.id, { force }),
@@ -283,7 +290,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
                 <Text style={styles.bannerTitle}>{movie.title}</Text>
                 <Text style={styles.bannerSubtitle}>
                   {selectedDate
-                    ? `Sélectionnez une séance — ${formatSelectedDate(parseLocalDate(selectedDate) ?? new Date())}`
+                    ? `Sélectionnez une séance — ${formatCalendarDate(selectedDate, cinemaTimezone)}`
                     : 'Sélectionnez une séance'}
                 </Text>
               </LinearGradient>
@@ -293,7 +300,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
               <Text style={styles.bannerTitle}>{movie.title}</Text>
               <Text style={styles.bannerSubtitle}>
                 {selectedDate
-                  ? `Sélectionnez une séance — ${formatSelectedDate(parseLocalDate(selectedDate) ?? new Date())}`
+                  ? `Sélectionnez une séance — ${formatCalendarDate(selectedDate, cinemaTimezone)}`
                   : 'Sélectionnez une séance'}
               </Text>
             </View>
@@ -308,11 +315,11 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
             contentContainerStyle={styles.daysRow}
           >
             {weekDateStrings.map((dateString) => {
-              const date = parseLocalDate(dateString);
-              if (!date) return null;
+              const dateParts = getCalendarDateParts(dateString);
+              if (!dateParts) return null;
 
               const selected = dateString === selectedDate;
-              const weekdayIndex = date.getDay();
+              const weekdayIndex = getWeekdayIndex(dateString);
 
               return (
                 <TouchableOpacity
@@ -322,7 +329,7 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.dayLabel, selected && styles.dayLabelSelected]}>
-                    {WEEKDAY_SHORT[weekdayIndex]} {date.getDate()}
+                    {WEEKDAY_SHORT[weekdayIndex]} {dateParts.day}
                   </Text>
                 </TouchableOpacity>
               );

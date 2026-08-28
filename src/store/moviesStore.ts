@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
-import { getMovieById, getMovies, getScreeningsByMovieId } from '../api/movies';
 import { getApiErrorMessage } from '../api/errors';
+import { MovieServiceInstance } from '../services/MovieService';
 import type { Movie, Screening } from '../types';
 
 export interface FetchMoviesOptions {
@@ -84,7 +84,7 @@ export const useMoviesStore = create<MoviesStore>((set, get) => ({
     let request: Promise<void> | null = null;
     request = (async () => {
       try {
-        const movies = await getMovies({ current: true });
+        const movies = await MovieServiceInstance.getMovies({ current: true });
         if (generation !== moviesGeneration || requestId !== moviesRequestId) return;
 
         const currentMoviesById = get().moviesById;
@@ -139,7 +139,7 @@ export const useMoviesStore = create<MoviesStore>((set, get) => ({
     let request: Promise<Movie | null> | null = null;
     request = (async () => {
       try {
-        const movie = await getMovieById(movieId);
+        const movie = await MovieServiceInstance.getMovieById(movieId);
         if (
           generation !== moviesGeneration ||
           movieDetailsRequestIds.get(movieId) !== requestId ||
@@ -209,7 +209,7 @@ export const useMoviesStore = create<MoviesStore>((set, get) => ({
     let request: Promise<Screening[]> | null = null;
     request = (async () => {
       try {
-        const screenings = await getScreeningsByMovieId(movieId);
+        const screenings = await MovieServiceInstance.getScreeningsByMovieId(movieId);
         if (
           generation !== moviesGeneration ||
           screeningsRequestIds.get(movieId) !== requestId

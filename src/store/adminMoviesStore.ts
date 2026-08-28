@@ -1,11 +1,7 @@
 import { create } from 'zustand';
 import { getApiErrorMessage } from '../api/errors';
 
-import {
-  createMovie as createMovieRequest,
-  getMovies,
-  updateMovie as updateMovieRequest,
-} from '../api/movies';
+import { MovieServiceInstance } from '../services/MovieService';
 import type { Movie, MovieRequest } from '../types';
 
 export interface AdminMoviesStore {
@@ -52,7 +48,7 @@ export const useAdminMoviesStore = create<AdminMoviesStore>((set, get) => ({
     let request: Promise<void> | null = null;
     request = (async () => {
       try {
-        const movies = await getMovies();
+        const movies = await MovieServiceInstance.getMovies();
         if (generation !== adminMoviesGeneration || requestId !== adminMoviesRequestId) return;
         set({ movies, moviesError: null });
       } catch (error: unknown) {
@@ -79,7 +75,7 @@ export const useAdminMoviesStore = create<AdminMoviesStore>((set, get) => ({
     set({ isSubmitting: true, submissionError: null, lastSavedMovie: null });
 
     try {
-      const movie = await createMovieRequest(payload);
+      const movie = await MovieServiceInstance.createMovie(payload);
       if (generation !== adminMoviesGeneration) return null;
       adminMoviesRequestId += 1;
       set({ lastSavedMovie: movie, submissionError: null });
@@ -103,7 +99,7 @@ export const useAdminMoviesStore = create<AdminMoviesStore>((set, get) => ({
     set({ isSubmitting: true, submissionError: null, lastSavedMovie: null });
 
     try {
-      const movie = await updateMovieRequest(movieId, payload);
+      const movie = await MovieServiceInstance.updateMovie(movieId, payload);
       if (generation !== adminMoviesGeneration) return null;
       adminMoviesRequestId += 1;
       set({ lastSavedMovie: movie, submissionError: null });
