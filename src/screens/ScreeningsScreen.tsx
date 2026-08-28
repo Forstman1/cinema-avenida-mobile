@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ImageBackground,
@@ -48,7 +48,7 @@ function formatSelectedDate(date: Date): string {
 export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
   const navigation = useNavigation<ScreeningsNavigationProp>();
   const insets = useSafeAreaInsets();
-  const { movie, initialDate } = route.params;
+  const { movie, initialDate, initialScreeningId } = route.params;
 
   const today = useMemo(() => getTodayDateString(), []);
   const weekDays = useMemo(
@@ -62,6 +62,8 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
 
   const [selectedDate, setSelectedDate] = useState<ISODateString | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const hasInitializedSelection = useRef(false);
+  const [hasLoadedScreenings, setHasLoadedScreenings] = useState(false);
   const screenings = useMoviesStore(
     (state) => state.screeningsByMovieId[movie.id] ?? EMPTY_SCREENINGS
   );
@@ -123,23 +125,51 @@ export default function ScreeningsScreen({ route }: ScreeningsScreenProps) {
   );
 
   useEffect(() => {
-    void fetchScreenings();
+    let active = true;
+    void fetchScreenings().finally(() => {
+      if (active) setHasLoadedScreenings(true);
+    });
+    return () => {
+      active = false;
+    };
   }, [fetchScreenings]);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || !hasLoadedScreenings || hasInitializedSelection.current) return;
+
+    const exactScreening = initialScreeningId === undefined
+      ? undefined
+      : screenings.find((screening) => screening.id === initialScreeningId);
+    const exactScreeningDate = exactScreening ? toISODate(exactScreening.date) : null;
 
     const preferredDate =
-      normalizedInitialDate && daysWithScreenings.includes(normalizedInitialDate)
+      exactScreeningDate && daysWithScreenings.includes(exactScreeningDate)
+        ? exactScreeningDate
+        : normalizedInitialDate && daysWithScreenings.includes(normalizedInitialDate)
         ? normalizedInitialDate
         : daysWithScreenings.includes(today)
           ? today
           : daysWithScreenings[0] ?? null;
 
-    setSelectedDate((currentDate) =>
-      currentDate && daysWithScreenings.includes(currentDate) ? currentDate : preferredDate
-    );
-  }, [daysWithScreenings, loading, normalizedInitialDate, today]);
+    const preferredScreenings = preferredDate ? groupedScreenings[preferredDate] ?? [] : [];
+    const preferredId = exactScreening && exactScreeningDate === preferredDate
+      && preferredScreenings.some((screening) => screening.id === exactScreening.id)
+      ? exactScreening.id
+      : preferredScreenings[0]?.id ?? null;
+
+    setSelectedDate(preferredDate);
+    setSelectedId(preferredId);
+    hasInitializedSelection.current = true;
+  }, [
+    daysWithScreenings,
+    groupedScreenings,
+    hasLoadedScreenings,
+    initialScreeningId,
+    loading,
+    normalizedInitialDate,
+    screenings,
+    today,
+  ]);
 
   const handleDayPress = useCallback((dateString: ISODateString) => {
     setSelectedDate(dateString);

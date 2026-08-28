@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   ImageBackground,
@@ -22,6 +22,7 @@ import type { Movie, Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { MovieDetailsScreenProps } from '../types/navigation';
 import { useMoviesStore } from '../store/moviesStore';
+import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 
 type DetailsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'MovieDetails'>;
 const EMPTY_SCREENINGS: Screening[] = [];
@@ -30,7 +31,7 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
   const navigation = useNavigation<DetailsNavigationProp>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { movieId, initialDate, screening: suggestedScreening } = route.params;
+  const { movieId, initialDate } = route.params;
 
   const movie = useMoviesStore((state) => state.moviesById[movieId] ?? null);
   const screenings = useMoviesStore((state) => state.screeningsByMovieId[movieId] ?? EMPTY_SCREENINGS);
@@ -44,6 +45,8 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
   const screeningsError = useMoviesStore((state) => state.screeningsErrors[movieId] ?? null);
   const loadMovieDetails = useMoviesStore((state) => state.fetchMovieDetails);
   const loadScreenings = useMoviesStore((state) => state.fetchScreenings);
+  const cinemaTimezone = useCinemaConfigStore((state) => state.config?.timezone);
+  const [now, setNow] = useState(() => new Date());
   const loading = isLoadingMovieDetails || isLoadingScreenings;
   const error = movieDetailsError ?? screeningsError;
 
@@ -61,17 +64,21 @@ export default function MovieDetailsScreen({ route }: MovieDetailsScreenProps) {
     void fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
   const nextScreening = useMemo(() => {
-    if (suggestedScreening) {
-      const matchingScreening = screenings.find((screening) => screening.id === suggestedScreening.id);
-      if (matchingScreening) return matchingScreening;
-    }
-    return getNextScreening(screenings);
-  }, [screenings, suggestedScreening]);
+    return getNextScreening(screenings, now, cinemaTimezone);
+  }, [cinemaTimezone, now, screenings]);
 
   const handleReserve = () => {
     if (!movie || !nextScreening) return;
-    navigation.navigate('Screenings', { movie, initialDate });
+    navigation.navigate(
+      'Screenings',
+      initialDate ? { movie, initialDate } : { movie }
+    );
   };
 
   if (loading) {

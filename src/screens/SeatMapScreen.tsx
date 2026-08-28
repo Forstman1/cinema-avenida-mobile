@@ -25,9 +25,6 @@ import type { SeatMapScreenProps } from '../types/navigation';
 
 type SeatMapNavigationProp = NativeStackNavigationProp<RootStackParamList, 'SeatMap'>;
 
-const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-const SEATS_PER_ROW = 12;
-
 const CATEGORY_CONFIG: Record<
   SeatCategory,
   { color: string; borderColor: string; label: string }
@@ -36,15 +33,39 @@ const CATEGORY_CONFIG: Record<
   NORMAL: { color: '#5a8bbf', borderColor: 'rgba(90,139,191,0.6)', label: 'Normal' },
   VIP: { color: '#8b5cf6', borderColor: 'rgba(139,92,246,0.6)', label: 'VIP' },
 };
-
-function getCategoryByRow(row: string): SeatCategory {
-  if (['A', 'B', 'C'].includes(row)) return 'CLUB';
-  if (['D', 'E', 'F', 'G'].includes(row)) return 'NORMAL';
-  return 'VIP';
-}
+const SEAT_CATEGORIES: SeatCategory[] = ['CLUB', 'NORMAL', 'VIP'];
 
 function isSeatTappable(status: SeatStatus): boolean {
   return status === 'LIBRE';
+}
+
+interface SeatRow {
+  name: string;
+  seats: Seat[];
+}
+
+function compareRows(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function groupSeatsByRow(seats: Seat[]): SeatRow[] {
+  const rows = new Map<string, Seat[]>();
+
+  seats.forEach((seat) => {
+    const rowSeats = rows.get(seat.row);
+    if (rowSeats) {
+      rowSeats.push(seat);
+    } else {
+      rows.set(seat.row, [seat]);
+    }
+  });
+
+  return Array.from(rows.entries())
+    .sort(([rowA], [rowB]) => compareRows(rowA, rowB))
+    .map(([name, rowSeats]) => ({
+      name,
+      seats: [...rowSeats].sort((a, b) => a.number - b.number),
+    }));
 }
 
 function getRemainingSeconds(lockedUntil: string | null): number {
@@ -89,6 +110,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
   const fetchConfig = useCinemaConfigStore((state) => state.fetchConfig);
 
   const selectedIds = useMemo(() => new Set(selectedSeatIds), [selectedSeatIds]);
+  const seatRows = useMemo(() => groupSeatsByRow(seats), [seats]);
 
   useFocusEffect(
     useCallback(() => {
@@ -262,16 +284,12 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     );
   };
 
-  const renderRow = (row: string) => {
-    const rowSeats = seats.filter((seat) => seat.row === row);
-    // If backend doesn't return seats sorted, sort by number
-    const sorted = rowSeats.sort((a, b) => a.number - b.number);
-
+  const renderRow = ({ name, seats: rowSeats }: SeatRow) => {
     return (
-      <View key={row} style={styles.row}>
-        <Text style={styles.rowLabel}>{row}</Text>
+      <View key={name} style={styles.row}>
+        <Text style={styles.rowLabel}>{name}</Text>
         <View style={styles.rowSeats}>
-          {sorted.map(renderSeat)}
+          {rowSeats.map(renderSeat)}
         </View>
       </View>
     );
@@ -396,14 +414,26 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.gridScrollContent}
         >
-          <View style={styles.grid}>{ROWS.map(renderRow)}</View>
+          <View style={styles.grid}>
+            {seatRows.length > 0 ? (
+              seatRows.map(renderRow)
+            ) : (
+              <View style={styles.emptySeatState}>
+                <MaterialIcons name="event-seat" size={30} color="#aa8986" />
+                <Text style={styles.emptySeatTitle}>Aucun siège disponible</Text>
+                <Text style={styles.emptySeatMessage}>
+                  Aucun siège n’est configuré pour cette séance.
+                </Text>
+              </View>
+            )}
+          </View>
         </ScrollView>
 
         {/* Legend */}
         <View style={styles.legendCard}>
           <Text style={styles.legendTitle}>Légende & Tarifs</Text>
           <View style={styles.legendGrid}>
-            {(Object.keys(CATEGORY_CONFIG) as SeatCategory[]).map((cat) => (
+            {SEAT_CATEGORIES.map((cat) => (
               <View key={cat} style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: CATEGORY_CONFIG[cat].color }]} />
                 <View>
@@ -592,6 +622,25 @@ const styles = StyleSheet.create({
   },
   grid: {
     gap: 10,
+  },
+  emptySeatState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 280,
+    paddingVertical: 32,
+  },
+  emptySeatTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 15,
+    color: '#e5e2e1',
+    marginTop: 10,
+  },
+  emptySeatMessage: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: '#888',
+    marginTop: 6,
+    textAlign: 'center',
   },
   row: {
     flexDirection: 'row',

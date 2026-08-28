@@ -3,28 +3,103 @@ import type { ISODateString, Reservation, Screening, TimeString } from '../types
 const WEEKDAYS = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'];
 const MONTHS = ['Jan.', 'Fév.', 'Mar.', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'];
 
-function getScreeningDateTimeValue(screening: Screening): Date | null {
-  if (!screening.date) return null;
-
-  const date = parseLocalDate(screening.date);
-  if (!date) return null;
-
-  const [hoursStr, minutesStr] = (screening.showTime ?? '00:00').split(':');
-  const hours = parseInt(hoursStr, 10);
-  const minutes = parseInt(minutesStr, 10);
-
-  date.setHours(
-    Number.isNaN(hours) ? 0 : hours,
-    Number.isNaN(minutes) ? 0 : minutes,
-    0,
-    0
-  );
-
-  return date;
+function getDateTimePartsInTimezone(
+  date: Date,
+  timezone: string
+): Record<string, string> | null {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(date);
+    const values: Record<string, string> = {};
+    parts.forEach((part) => {
+      values[part.type] = part.value;
+    });
+    return values.year && values.month && values.day && values.hour && values.minute
+      ? values
+      : null;
+  } catch {
+    return null;
+  }
 }
 
-export function getScreeningDateTime(reservation: Reservation): Date | null {
-  return reservation.screening ? getScreeningDateTimeValue(reservation.screening) : null;
+function getScreeningDateTimeValue(screening: Screening, timezone?: string): Date | null {
+  if (!screening.date) return null;
+
+  const dateString = toISODate(screening.date);
+  const date = parseLocalDate(dateString);
+  if (!date) return null;
+
+  const normalizedTime = toHHMM(screening.showTime);
+  if (!/^\d{2}:\d{2}$/.test(normalizedTime)) return null;
+  const [year, month, day] = dateString.split('-').map(Number);
+  const [hours, minutes] = normalizedTime.split(':').map(Number);
+
+  if (!timezone) {
+    date.setHours(hours, minutes, 0, 0);
+    return date;
+  }
+
+  // Treat the API date/time as a wall-clock value in the cinema timezone,
+  // then resolve it to the corresponding instant for accurate hour checks.
+  const wallTimeAsUtc = Date.UTC(year, month - 1, day, hours, minutes);
+  let timestamp = wallTimeAsUtc;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = getDateTimePartsInTimezone(new Date(timestamp), timezone);
+    if (!parts) {
+      date.setHours(hours, minutes, 0, 0);
+      return date;
+    }
+    const displayedWallTime = Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      Number(parts.hour),
+      Number(parts.minute)
+    );
+    const nextTimestamp = wallTimeAsUtc - (displayedWallTime - timestamp);
+    if (nextTimestamp === timestamp) break;
+    timestamp = nextTimestamp;
+  }
+
+  return new Date(timestamp);
+}
+
+function getLocalDateTimeKey(date: Date): string {
+  const year = String(date.getFullYear()).padStart(4, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function getDateTimeKeyInTimezone(date: Date, timezone?: string): string {
+  if (!timezone) return getLocalDateTimeKey(date);
+
+  const values = getDateTimePartsInTimezone(date, timezone);
+  return values
+    ? `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`
+    : getLocalDateTimeKey(date);
+}
+
+function getScreeningDateTimeKey(screening: Screening): string | null {
+  const date = toISODate(screening.date);
+  const time = toHHMM(screening.showTime);
+  if (!parseLocalDate(date) || !/^\d{2}:\d{2}$/.test(time)) return null;
+  return `${date}T${time}`;
+}
+
+export function getScreeningDateTime(reservation: Reservation, timezone?: string): Date | null {
+  return reservation.screening
+    ? getScreeningDateTimeValue(reservation.screening, timezone)
+    : null;
 }
 
 export function formatScreeningDate(dateString: string): string {
@@ -79,9 +154,14 @@ export function parseLocalDate(dateString: string): Date | null {
   return date;
 }
 
-export function isScreeningInFuture(screening: Screening, now = new Date()): boolean {
-  const screeningDateTime = getScreeningDateTimeValue(screening);
-  return Boolean(screeningDateTime && screeningDateTime.getTime() >= now.getTime());
+export function isScreeningInFuture(
+  screening: Screening,
+  now = new Date(),
+  timezone?: string
+): boolean {
+  const screeningDateTimeKey = getScreeningDateTimeKey(screening);
+  if (!screeningDateTimeKey) return false;
+  return screeningDateTimeKey > getDateTimeKeyInTimezone(now, timezone);
 }
 
 export function formatDuration(minutesValue: number): string {
@@ -121,8 +201,12 @@ export function compareShowTimes(a: string, b: string): number {
   return a.localeCompare(b);
 }
 
-export function getNextScreening(screenings: Screening[]): Screening | null {
-  const upcoming = screenings.filter((screening) => isScreeningInFuture(screening));
+export function getNextScreening(
+  screenings: Screening[],
+  now = new Date(),
+  timezone?: string
+): Screening | null {
+  const upcoming = screenings.filter((screening) => isScreeningInFuture(screening, now, timezone));
   if (!upcoming.length) return null;
   return [...upcoming].sort(compareScreeningsByDateTime)[0] ?? null;
 }

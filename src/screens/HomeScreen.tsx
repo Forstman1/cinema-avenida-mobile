@@ -166,6 +166,7 @@ function CustomerHomeScreen() {
     navigation.navigate('Screenings', {
       movie,
       initialDate: toISODate(screening.date),
+      initialScreeningId: screening.id,
     });
   };
 

@@ -17,11 +17,12 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { getApiErrorMessage } from '../api/errors';
+import { getApiErrorDetails, getApiErrorMessage } from '../api/errors';
 import ErrorState from '../components/ErrorState';
 import PosterImage from '../components/PosterImage';
 import { useAuthStore } from '../store/authStore';
 import { useBookingsStore } from '../store/bookingsStore';
+import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 import { formatScreeningDate, getScreeningDateTime } from '../utils/date';
 import type { Reservation, Seat } from '../types';
 import type { RootStackParamList } from '../types/navigation';
@@ -29,11 +30,37 @@ import type { RootStackParamList } from '../types/navigation';
 type BookingsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
 
 type TabType = 'upcoming' | 'history';
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+const CANCELLATION_WINDOW_MESSAGE = 'Annulation impossible moins de 2 heures avant la séance';
 
-function isUpcoming(reservation: Reservation): boolean {
+interface CancellationState {
+  allowed: boolean;
+  windowClosed: boolean;
+}
+
+function isUpcoming(reservation: Reservation, timezone: string | undefined, nowMs: number): boolean {
   if (reservation.status !== 'CONFIRMED') return false;
-  const screeningDateTime = getScreeningDateTime(reservation);
-  return !!screeningDateTime && screeningDateTime.getTime() > Date.now();
+  const screeningDateTime = getScreeningDateTime(reservation, timezone);
+  return !!screeningDateTime && screeningDateTime.getTime() > nowMs;
+}
+
+function getCancellationState(
+  reservation: Reservation,
+  timezone: string | undefined,
+  nowMs: number
+): CancellationState {
+  if (reservation.status !== 'CONFIRMED') {
+    return { allowed: false, windowClosed: false };
+  }
+
+  const screeningStart = getScreeningDateTime(reservation, timezone);
+  if (!screeningStart) return { allowed: false, windowClosed: false };
+
+  const remainingMs = screeningStart.getTime() - nowMs;
+  return {
+    allowed: remainingMs > TWO_HOURS_MS,
+    windowClosed: remainingMs > 0 && remainingMs <= TWO_HOURS_MS,
+  };
 }
 
 function getPendingReservation(reservations: Reservation[]): Reservation | null {
@@ -90,6 +117,7 @@ export default function MyBookingsScreen() {
   const navigation = useNavigation<BookingsNavigationProp>();
   const insets = useSafeAreaInsets();
   const userId = useAuthStore((state) => state.user?.id ?? null);
+  const cinemaTimezone = useCinemaConfigStore((state) => state.config?.timezone);
   const reservations = useBookingsStore((state) => state.reservations);
   const loading = useBookingsStore((state) => state.isLoadingReservations);
   const refreshing = useBookingsStore((state) => state.isRefreshingReservations);
@@ -101,6 +129,12 @@ export default function MyBookingsScreen() {
   const selectBooking = useBookingsStore((state) => state.selectBooking);
   const [activeTab, setActiveTab] = useState<TabType>('upcoming');
   const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTimeMs(Date.now()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const pendingReservation = useMemo(() => getPendingReservation(reservations), [reservations]);
 
@@ -135,30 +169,38 @@ export default function MyBookingsScreen() {
 
   const upcoming = useMemo(
     () => reservations
-      .filter(isUpcoming)
+      .filter((reservation) => isUpcoming(reservation, cinemaTimezone, currentTimeMs))
       .sort((a, b) => {
-        const dateA = getScreeningDateTime(a)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-        const dateB = getScreeningDateTime(b)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        const dateA = getScreeningDateTime(a, cinemaTimezone)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        const dateB = getScreeningDateTime(b, cinemaTimezone)?.getTime() ?? Number.MAX_SAFE_INTEGER;
         return dateA - dateB;
       }),
-    [reservations]
+    [cinemaTimezone, currentTimeMs, reservations]
   );
   const history = useMemo(
     () => reservations
       .filter(
         (reservation) =>
           reservation.status !== 'EN_ATTENTE' &&
-          !isUpcoming(reservation)
+          !isUpcoming(reservation, cinemaTimezone, currentTimeMs)
       )
       .sort((a, b) => {
-        const dateA = getScreeningDateTime(a)?.getTime() ?? 0;
-        const dateB = getScreeningDateTime(b)?.getTime() ?? 0;
+        const dateA = getScreeningDateTime(a, cinemaTimezone)?.getTime() ?? 0;
+        const dateB = getScreeningDateTime(b, cinemaTimezone)?.getTime() ?? 0;
         return dateB - dateA;
       }),
-    [pendingReservation?.id, reservations]
+    [cinemaTimezone, currentTimeMs, pendingReservation?.id, reservations]
   );
 
   const handleCancel = (reservation: Reservation) => {
+    const cancellation = getCancellationState(reservation, cinemaTimezone, Date.now());
+    if (!cancellation.allowed) {
+      if (cancellation.windowClosed) {
+        Alert.alert('Annulation impossible', CANCELLATION_WINDOW_MESSAGE);
+      }
+      return;
+    }
+
     Alert.alert(
       'Annuler cette réservation ?',
       'Cette action est définitive.',
@@ -172,7 +214,11 @@ export default function MyBookingsScreen() {
               await cancelReservation(reservation.id);
               Alert.alert('Annulée', 'Votre réservation a été annulée.');
             } catch (error: unknown) {
-              Alert.alert('Erreur', getApiErrorMessage(error, 'Impossible d\'annuler.'));
+              const details = getApiErrorDetails(error);
+              const message = details.code === 'CANCELLATION_WINDOW_CLOSED'
+                ? CANCELLATION_WINDOW_MESSAGE
+                : getApiErrorMessage(error, 'Impossible d\'annuler.');
+              Alert.alert('Erreur', message);
             }
           },
         },
@@ -224,6 +270,7 @@ export default function MyBookingsScreen() {
     const dateLabel = screening ? formatScreeningDate(screening.date) : '-';
     const isCancelled = reservation.status === 'CANCELLED';
     const isHistory = dimmed || isCancelled;
+    const cancellation = getCancellationState(reservation, cinemaTimezone, currentTimeMs);
     const canViewTicket = Boolean(
       !isCancelled && movie && screening && reservation.ticket && seats.length > 0
     );
@@ -291,7 +338,11 @@ export default function MyBookingsScreen() {
                 <Text style={styles.viewTicketButtonText}>Voir le billet</Text>
               </TouchableOpacity>
             )}
-            {!isHistory && (
+            {cancellation.windowClosed && !isHistory ? (
+              <Text style={styles.cancellationUnavailableText}>
+                {CANCELLATION_WINDOW_MESSAGE}
+              </Text>
+            ) : cancellation.allowed && !isHistory ? (
               <TouchableOpacity
                 style={styles.cancelButton}
                 onPress={() => handleCancel(reservation)}
@@ -306,7 +357,7 @@ export default function MyBookingsScreen() {
                   <Text style={styles.cancelButtonText}>Annuler</Text>
                 )}
               </TouchableOpacity>
-            )}
+            ) : null}
           </View>
         </View>
       </View>
@@ -909,5 +960,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     fontSize: 11,
     color: '#c7c0be',
+  },
+  cancellationUnavailableText: {
+    flex: 1,
+    fontFamily: 'Inter-Regular',
+    fontSize: 10,
+    color: '#777',
+    textAlign: 'right',
   },
 });

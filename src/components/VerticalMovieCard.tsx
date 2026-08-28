@@ -25,21 +25,29 @@ export default function VerticalMovieCard({
   const firstScreening = sortedScreenings[0];
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={() => onPress(movie, firstScreening)}
-      style={styles.container}
-      accessibilityRole="button"
-      accessibilityLabel={`Voir les séances de ${movie.title}`}
-    >
-      <PosterImage
-        uri={movie.poster}
-        title={movie.title}
-        style={styles.poster}
-        borderRadius={10}
-      />
+    <View style={styles.container}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => onPress(movie, firstScreening)}
+        style={styles.posterPressable}
+        accessibilityRole="button"
+        accessibilityLabel={`Voir les séances de ${movie.title}`}
+      >
+        <PosterImage
+          uri={movie.poster}
+          title={movie.title}
+          style={styles.poster}
+          borderRadius={10}
+        />
+      </TouchableOpacity>
       <View style={styles.content}>
-        <View style={styles.details}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => onPress(movie, firstScreening)}
+          style={styles.details}
+          accessibilityRole="button"
+          accessibilityLabel={`Voir les séances de ${movie.title}`}
+        >
           <Text style={styles.title} numberOfLines={2}>
             {movie.title}
           </Text>
@@ -49,7 +57,7 @@ export default function VerticalMovieCard({
             <MaterialIcons name="schedule" size={14} color="#aa8986" />
             <Text style={styles.metaText}>{formatDuration(movie.duration)}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
         <View style={styles.chips}>
           {sortedScreenings.length > 0 ? (
             sortedScreenings.map((screening) => {
@@ -70,7 +78,7 @@ export default function VerticalMovieCard({
           ) : null}
         </View>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -94,6 +102,10 @@ const styles = StyleSheet.create({
     height: 126,
     borderRadius: 10,
     backgroundColor: '#2a2a2a',
+  },
+  posterPressable: {
+    width: 84,
+    height: 126,
   },
   content: {
     flex: 1,

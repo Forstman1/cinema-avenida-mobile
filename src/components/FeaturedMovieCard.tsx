@@ -26,13 +26,7 @@ export default function FeaturedMovieCard({
   );
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.92}
-      onPress={() => onPress(movie, sortedScreenings[0])}
-      style={styles.card}
-      accessibilityRole="button"
-      accessibilityLabel={`Film à la une, ${movie.title}. Voir les séances`}
-    >
+    <View style={styles.card}>
       <PosterImage uri={movie.poster} title={movie.title} style={styles.backdrop} />
       <LinearGradient
         colors={['rgba(19,19,19,0.04)', 'rgba(19,19,19,0.58)', 'rgba(19,19,19,0.98)']}
@@ -46,13 +40,21 @@ export default function FeaturedMovieCard({
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.title} numberOfLines={2}>{movie.title}</Text>
-        <View style={styles.metaRow}>
-          <Text style={styles.genre} numberOfLines={1}>{movie.genre}</Text>
-          <View style={styles.dot} />
-          <MaterialIcons name="schedule" size={15} color="#e2beba" />
-          <Text style={styles.metaText}>{formatDuration(movie.duration)}</Text>
-        </View>
+        <TouchableOpacity
+          activeOpacity={0.92}
+          onPress={() => onPress(movie, sortedScreenings[0])}
+          style={styles.detailsPressable}
+          accessibilityRole="button"
+          accessibilityLabel={`Film à la une, ${movie.title}. Voir les séances`}
+        >
+          <Text style={styles.title} numberOfLines={2}>{movie.title}</Text>
+          <View style={styles.metaRow}>
+            <Text style={styles.genre} numberOfLines={1}>{movie.genre}</Text>
+            <View style={styles.dot} />
+            <MaterialIcons name="schedule" size={15} color="#e2beba" />
+            <Text style={styles.metaText}>{formatDuration(movie.duration)}</Text>
+          </View>
+        </TouchableOpacity>
 
         <View style={styles.timesRow}>
           {sortedScreenings.map((screening) => (
@@ -69,12 +71,18 @@ export default function FeaturedMovieCard({
           ))}
         </View>
 
-        <View style={styles.actionRow}>
+        <TouchableOpacity
+          activeOpacity={0.92}
+          onPress={() => onPress(movie, sortedScreenings[0])}
+          style={styles.actionRow}
+          accessibilityRole="button"
+          accessibilityLabel={`Voir les séances de ${movie.title}`}
+        >
           <Text style={styles.actionText}>Voir les séances</Text>
           <MaterialIcons name="arrow-forward" size={18} color="#fff" />
-        </View>
+        </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -120,6 +128,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
     padding: 18,
+  },
+  detailsPressable: {
+    alignSelf: 'stretch',
   },
   title: {
     fontFamily: 'EBGaramond-SemiBold',
