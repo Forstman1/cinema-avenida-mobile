@@ -52,11 +52,7 @@ export function setUnauthorizedHandler(handler: () => void | Promise<void>): voi
   unauthorizedHandler = handler;
 }
 
-/**
- * The app currently has one configured API base URL. The optional version
- * keeps the call shape compatible with services that may need versioned APIs.
- */
-export function Api(_apiVersion?: string) {
+export function Api() {
   return apiClient;
 }
 
@@ -189,5 +185,3 @@ const apiClient = {
     return request<T>(path, 'DELETE', payload, options);
   },
 };
-
-export default Api;
