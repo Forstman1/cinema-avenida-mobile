@@ -49,6 +49,10 @@ function isUpcoming(reservation: Reservation, timezone: string | undefined, nowM
   return !!screeningDateTime && screeningDateTime.getTime() > nowMs;
 }
 
+function isExpiredPendingWithoutTicket(reservation: Reservation): boolean {
+  return reservation.status === 'CANCELLED' && reservation.ticket === null;
+}
+
 function getCancellationState(
   reservation: Reservation,
   timezone: string | undefined,
@@ -232,6 +236,7 @@ export default function MyBookingsScreen() {
       .filter(
         (reservation) =>
           reservation.status !== 'EN_ATTENTE' &&
+          !isExpiredPendingWithoutTicket(reservation) &&
           !isUpcoming(reservation, cinemaTimezone, currentTimeMs)
       )
       .sort((a, b) => {
