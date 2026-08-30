@@ -67,7 +67,7 @@ function isCompleteMovie(movie: MovieReference): movie is Movie {
 }
 
 function toMovieSummary(movie: MovieReference): MovieSummary {
-  return { id: movie.id, title: movie.title };
+  return { id: movie.id, title: movie.title, poster: movie.poster };
 }
 
 function normalizeReservationScreeningForPayment(

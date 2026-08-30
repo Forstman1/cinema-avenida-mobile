@@ -26,9 +26,11 @@ export function normalizeMovie(movie: Movie): Movie {
 }
 
 export function normalizeMovieSummary(movie: MovieSummary): MovieSummary {
+  const poster = typeof movie.poster === 'string' ? movie.poster.trim() : null;
   return {
     id: movie.id,
     title: movie.title,
+    poster: poster || null,
   };
 }
 

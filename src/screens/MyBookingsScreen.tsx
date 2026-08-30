@@ -337,7 +337,7 @@ export default function MyBookingsScreen() {
     return (
       <View key={reservation.id} style={[styles.card, isHistory && styles.cardDimmed]}>
         <PosterImage
-          uri={null}
+          uri={movie?.poster}
           title={movie?.title}
           style={styles.poster}
           borderRadius={12}
@@ -501,7 +501,7 @@ export default function MyBookingsScreen() {
           style={styles.pendingCard}
         >
           <PosterImage
-            uri={null}
+            uri={pendingReservation.screening?.movie?.poster}
             title={pendingReservation.screening?.movie?.title}
             style={styles.pendingPoster}
             borderRadius={10}

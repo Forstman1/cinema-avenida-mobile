@@ -18,6 +18,7 @@ export interface User {
 export interface MovieSummary {
   id: number;
   title: string;
+  poster: string | null;
 }
 
 export interface LoginRequest {
