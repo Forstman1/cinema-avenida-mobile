@@ -16,10 +16,12 @@ import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import {
+  getApiErrorDetails,
   getApiErrorMessage,
   getScreeningMutationErrorMessage,
 } from '../api/errors';
 import ErrorState from '../components/ErrorState';
+import Toast from '../components/Toast';
 import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 import { useAdminScreeningsStore } from '../store/adminScreeningsStore';
 import {
@@ -27,6 +29,7 @@ import {
   formatCalendarDate,
   getTodayDateString,
   isScreeningDateTimeInPast,
+  isScreeningPast,
   parseLocalDate,
   toHHMM,
   toISODate,
@@ -43,6 +46,8 @@ function groupScreeningsByDate(screenings: Screening[]): Record<string, Screenin
     return acc;
   }, {} as Record<string, Screening[]>);
 }
+
+const EMPTY_SCREENING_IDS: number[] = [];
 
 export default function ManageScreeningsScreen({
   route,
@@ -63,7 +68,7 @@ export default function ManageScreeningsScreen({
   );
 
   const screeningIds = useAdminScreeningsStore(
-    (state) => state.screeningIdsByMovieId[movie.id] ?? []
+    (state) => state.screeningIdsByMovieId[movie.id] ?? EMPTY_SCREENING_IDS
   );
   const screeningsById = useAdminScreeningsStore((state) => state.screeningsById);
   const loading = useAdminScreeningsStore(
@@ -96,6 +101,21 @@ export default function ManageScreeningsScreen({
   const [editDate, setEditDate] = useState<string>('');
   const [editSlot, setEditSlot] = useState<string | null>(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const dismissToast = useCallback(() => setToastMessage(null), []);
+  const [backendReadOnlyScreeningIds, setBackendReadOnlyScreeningIds] = useState<number[]>([]);
+  const markScreeningReadOnly = useCallback((screeningId: number) => {
+    setBackendReadOnlyScreeningIds((ids) => (
+      ids.includes(screeningId) ? ids : [...ids, screeningId]
+    ));
+  }, []);
+  const isScreeningReadOnly = useCallback(
+    (screening: Screening, now = new Date()) => (
+      backendReadOnlyScreeningIds.includes(screening.id)
+      || isScreeningPast(screening, cinemaTimezone, now)
+    ),
+    [backendReadOnlyScreeningIds, cinemaTimezone],
+  );
 
   useEffect(() => {
     if (!hasEditedDate.current) setDate(todayDate);
@@ -211,6 +231,8 @@ export default function ManageScreeningsScreen({
   };
 
   const openEditModal = (screening: Screening) => {
+    if (isScreeningReadOnly(screening)) return;
+
     clearUpdateError();
     clearDeleteError();
     setEditScreening(screening);
@@ -228,6 +250,10 @@ export default function ManageScreeningsScreen({
 
   const handleEdit = async () => {
     if (!editScreening || !configAvailable) return;
+    if (isScreeningReadOnly(editScreening)) {
+      Alert.alert('Modification impossible', 'Cette séance est passée et ne peut plus être modifiée.');
+      return;
+    }
     if (!isEditDateValid) {
       Alert.alert('Champs invalides', 'Veuillez saisir une date valide au format AAAA-MM-JJ.');
       return;
@@ -254,6 +280,10 @@ export default function ManageScreeningsScreen({
       closeEditModal();
       await fetchScreenings();
     } catch (error: unknown) {
+      const details = getApiErrorDetails(error);
+      if (details.code === 'SCREENING_PAST_READ_ONLY') {
+        markScreeningReadOnly(editScreening.id);
+      }
       Alert.alert(
         'Modification impossible',
         getScreeningMutationErrorMessage(error, 'update') ||
@@ -264,11 +294,21 @@ export default function ManageScreeningsScreen({
   };
 
   const performDelete = async (screening: Screening) => {
+    if (isScreeningReadOnly(screening)) return;
+
     try {
       const deleted = await deleteAdminScreening(screening.id);
       if (!deleted) return;
       await fetchScreenings();
     } catch (error: unknown) {
+      const details = getApiErrorDetails(error);
+      if (details.code === 'SCREENING_HAS_RESERVATIONS') {
+        setToastMessage(getScreeningMutationErrorMessage(error, 'delete'));
+        return;
+      }
+      if (details.code === 'SCREENING_PAST_READ_ONLY') {
+        markScreeningReadOnly(screening.id);
+      }
       Alert.alert(
         'Suppression impossible',
         getScreeningMutationErrorMessage(error, 'delete') ||
@@ -279,6 +319,8 @@ export default function ManageScreeningsScreen({
   };
 
   const confirmDelete = (screening: Screening) => {
+    if (isScreeningReadOnly(screening)) return;
+
     Alert.alert(
       'Supprimer la séance ?',
       `Voulez-vous supprimer la séance du ${toISODate(screening.date)} à ${toHHMM(screening.showTime)} ?`,
@@ -431,47 +473,74 @@ export default function ManageScreeningsScreen({
                 {grouped[dateKey]
                   .slice()
                   .sort((a, b) => compareShowTimes(a.showTime, b.showTime))
-                  .map((screening) => (
-                    <View key={screening.id} style={styles.screeningRow}>
-                      <View style={styles.timeChip}>
-                        <MaterialIcons name="access-time" size={14} color="#e2beba" />
-                        <Text style={styles.timeChipText}>{screening.showTime}</Text>
+                  .map((screening) => {
+                    const screeningIsPast = isScreeningReadOnly(
+                      screening,
+                      dateContextNow
+                    );
+                    return (
+                      <View key={screening.id} style={styles.screeningRow}>
+                        <View style={styles.screeningDetails}>
+                          <View style={styles.timeChip}>
+                            <MaterialIcons name="access-time" size={14} color="#e2beba" />
+                            <Text style={styles.timeChipText}>{screening.showTime}</Text>
+                          </View>
+                          {screeningIsPast ? (
+                            <View style={styles.readOnlyState}>
+                              <MaterialIcons name="lock-outline" size={15} color="#aa8986" />
+                              <Text style={styles.readOnlyText}>
+                                Lecture seule — les séances passées restent visibles.
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <View style={styles.screeningActions}>
+                          <TouchableOpacity
+                            style={[
+                              styles.actionButton,
+                              screeningIsPast && styles.actionButtonDisabled,
+                            ]}
+                            onPress={() => openEditModal(screening)}
+                            activeOpacity={0.8}
+                            disabled={screeningIsPast || isUpdatingScreening || isDeletingScreening}
+                            accessibilityState={{ disabled: screeningIsPast }}
+                          >
+                            {isUpdatingScreening && updatingScreeningId === screening.id ? (
+                              <ActivityIndicator size="small" color="#ffb4ac" />
+                            ) : (
+                              <MaterialIcons name="edit" size={16} color="#ffb4ac" />
+                            )}
+                            <Text style={styles.actionButtonText}>Modifier</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.actionButton,
+                              styles.deleteActionButton,
+                              screeningIsPast && styles.actionButtonDisabled,
+                            ]}
+                            onPress={() => confirmDelete(screening)}
+                            activeOpacity={0.8}
+                            disabled={screeningIsPast || isUpdatingScreening || isDeletingScreening}
+                            accessibilityState={{ disabled: screeningIsPast }}
+                          >
+                            {isDeletingScreening && deletingScreeningId === screening.id ? (
+                              <ActivityIndicator size="small" color="#ffb4ac" />
+                            ) : (
+                              <MaterialIcons name="delete-outline" size={16} color="#ffb4ac" />
+                            )}
+                            <Text style={styles.actionButtonText}>Supprimer</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                      <View style={styles.screeningActions}>
-                        <TouchableOpacity
-                          style={styles.actionButton}
-                          onPress={() => openEditModal(screening)}
-                          activeOpacity={0.8}
-                          disabled={isUpdatingScreening || isDeletingScreening}
-                        >
-                          {isUpdatingScreening && updatingScreeningId === screening.id ? (
-                            <ActivityIndicator size="small" color="#ffb4ac" />
-                          ) : (
-                            <MaterialIcons name="edit" size={16} color="#ffb4ac" />
-                          )}
-                          <Text style={styles.actionButtonText}>Modifier</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.actionButton, styles.deleteActionButton]}
-                          onPress={() => confirmDelete(screening)}
-                          activeOpacity={0.8}
-                          disabled={isUpdatingScreening || isDeletingScreening}
-                        >
-                          {isDeletingScreening && deletingScreeningId === screening.id ? (
-                            <ActivityIndicator size="small" color="#ffb4ac" />
-                          ) : (
-                            <MaterialIcons name="delete-outline" size={16} color="#ffb4ac" />
-                          )}
-                          <Text style={styles.actionButtonText}>Supprimer</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))}
+                    );
+                  })}
               </View>
             </View>
           ))
         )}
       </ScrollView>
+
+      <Toast message={toastMessage} onDismiss={dismissToast} />
 
       <Modal
         animationType="slide"
@@ -741,6 +810,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
   },
+  screeningDetails: {
+    flex: 1,
+    gap: 8,
+  },
   screeningActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -759,10 +832,25 @@ const styles = StyleSheet.create({
   deleteActionButton: {
     borderColor: 'rgba(255,180,172,0.18)',
   },
+  actionButtonDisabled: {
+    opacity: 0.45,
+  },
   actionButtonText: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 11,
     color: '#ffb4ac',
+  },
+  readOnlyState: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  readOnlyText: {
+    flex: 1,
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#aa8986',
   },
   modalOverlay: {
     flex: 1,

@@ -25,6 +25,7 @@ export type MainTabParamList = {
 
 export type RootStackParamList = {
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
+  EditProfile: undefined;
   MovieDetails: { movieId: number; initialDate?: ISODateString };
   Screenings: { movie: Movie; initialDate?: ISODateString; initialScreeningId?: number };
   SeatMap: { movie: Movie; screening: Screening };
@@ -48,3 +49,4 @@ export type AdminMoviesScreenProps = NativeStackScreenProps<RootStackParamList, 
 export type AddMovieScreenProps = NativeStackScreenProps<RootStackParamList, 'AddMovie'>;
 export type ManageScreeningsScreenProps = NativeStackScreenProps<RootStackParamList, 'ManageScreenings'>;
 export type ProgrammeScreenProps = NativeStackScreenProps<RootStackParamList, 'Programme'>;
+export type EditProfileScreenProps = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;

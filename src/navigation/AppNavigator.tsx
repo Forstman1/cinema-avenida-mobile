@@ -10,6 +10,7 @@ import SignupScreen from '../screens/SignupScreen';
 import HomeScreen from '../screens/HomeScreen';
 import MyBookingsScreen from '../screens/MyBookingsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
 import MovieDetailsScreen from '../screens/MovieDetailsScreen';
 import ScreeningsScreen from '../screens/ScreeningsScreen';
 import SeatMapScreen from '../screens/SeatMapScreen';
@@ -94,6 +95,7 @@ function RootNavigator() {
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
       <RootStack.Screen name="Main" component={MainTabs} />
+      <RootStack.Screen name="EditProfile" component={EditProfileScreen} />
       <RootStack.Screen name="MovieDetails" component={MovieDetailsScreen} />
       <RootStack.Screen name="Screenings" component={ScreeningsScreen} />
       <RootStack.Screen name="SeatMap" component={SeatMapScreen} />

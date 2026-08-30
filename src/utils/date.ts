@@ -270,6 +270,14 @@ export function isScreeningDateTimeInPast(
   return screeningInstant !== null && screeningInstant.getTime() <= now.getTime();
 }
 
+export function isScreeningPast(
+  screening: Screening,
+  timezone?: string,
+  now = new Date()
+): boolean {
+  return isScreeningDateTimeInPast(screening.date, screening.showTime, timezone, now);
+}
+
 export function isScreeningInFuture(
   screening: Screening,
   now = new Date(),

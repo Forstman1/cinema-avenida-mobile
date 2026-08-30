@@ -102,8 +102,10 @@ export function getScreeningMutationErrorMessage(
       return 'Cette séance est introuvable. Elle a peut-être déjà été supprimée.';
     case 'SCREENING_HAS_RESERVATIONS':
       return action === 'delete'
-        ? 'Cette séance ne peut pas être supprimée car elle comporte des réservations.'
+        ? 'Impossible de supprimer cette séance : des réservations existent déjà.'
         : 'Cette séance ne peut pas être modifiée car elle comporte des réservations.';
+    case 'SCREENING_PAST_READ_ONLY':
+      return 'Cette séance est passée et ne peut plus être modifiée.';
     case 'SCREENING_SLOT_CONFLICT':
       return 'Ce créneau est déjà occupé pour cette date.';
     case 'SCREENING_IN_PAST':

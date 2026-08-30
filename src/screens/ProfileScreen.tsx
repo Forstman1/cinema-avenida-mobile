@@ -10,14 +10,19 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useAuthStore } from '../store/authStore';
+import type { MainTabParamList, RootStackParamList } from '../types/navigation';
 
 function getInitial(name: string): string {
   return name?.trim()?.charAt(0)?.toUpperCase() ?? '?';
 }
 
 export default function ProfileScreen() {
+  const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList, 'Profil'>>();
   const userName = useAuthStore((state) => state.user?.name ?? 'Invité');
   const userEmail = useAuthStore((state) => state.user?.email ?? '');
   const logout = useAuthStore((state) => state.logout);
@@ -58,14 +63,24 @@ export default function ProfileScreen() {
         <Text style={styles.name} numberOfLines={1}>{userName}</Text>
         <Text style={styles.email} numberOfLines={1}>{userEmail}</Text>
 
-        {/* Profile row — display only, no backend route exists */}
-        <View style={styles.row}>
+        <TouchableOpacity
+          style={styles.row}
+          onPress={() => {
+            const rootNavigation = navigation.getParent<
+              NativeStackNavigationProp<RootStackParamList>
+            >();
+            rootNavigation?.navigate('EditProfile');
+          }}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Modifier le profil"
+        >
           <View style={styles.rowIcon}>
             <MaterialIcons name="person" size={20} color="#e2beba" />
           </View>
-          <Text style={styles.rowText}>Modifier mon profil</Text>
+          <Text style={styles.rowText}>Modifier le profil</Text>
           <MaterialIcons name="chevron-right" size={20} color="#666" />
-        </View>
+        </TouchableOpacity>
 
         {/* Admin film management is now a top-level bottom tab. */}
       </View>
@@ -134,7 +149,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.05)',
     paddingHorizontal: 16,
     paddingVertical: 18,
-    opacity: 0.6,
     marginBottom: 12,
   },
   adminRow: {

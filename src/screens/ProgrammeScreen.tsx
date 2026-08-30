@@ -23,6 +23,7 @@ import {
 } from '../api/errors';
 import ErrorState from '../components/ErrorState';
 import PosterImage from '../components/PosterImage';
+import Toast from '../components/Toast';
 import { useAdminMoviesStore } from '../store/adminMoviesStore';
 import { useAdminScreeningsStore } from '../store/adminScreeningsStore';
 import { useCinemaConfigStore } from '../store/cinemaConfigStore';
@@ -37,12 +38,15 @@ import {
   getTodayDateString,
   getWeekdayIndex,
   isScreeningDateTimeInPast,
+  isScreeningPast,
   toHHMM,
   toISODate,
 } from '../utils/date';
 import { useCinemaDateContext } from '../hooks/useCinemaDateContext';
 
 const WEEKDAY_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+const EMPTY_SCREENING_IDS: number[] = [];
+
 export default function ProgrammeScreen() {
   const navigation = useNavigation<ProgrammeScreenProps['navigation']>();
   const insets = useSafeAreaInsets();
@@ -85,7 +89,7 @@ export default function ProgrammeScreen() {
   }, [cinemaTimezone, dateContextNow, selectedDateString, today]);
 
   const screeningIds = useAdminScreeningsStore(
-    (state) => state.screeningIdsByDate[selectedDateString] ?? []
+    (state) => state.screeningIdsByDate[selectedDateString] ?? EMPTY_SCREENING_IDS
   );
   const screeningsById = useAdminScreeningsStore((state) => state.screeningsById);
   const loadingSchedule = useAdminScreeningsStore(
@@ -110,6 +114,21 @@ export default function ProgrammeScreen() {
   const clearUpdateError = useAdminScreeningsStore((state) => state.clearUpdateError);
   const clearDeleteError = useAdminScreeningsStore((state) => state.clearDeleteError);
   const [refreshing, setRefreshing] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const dismissToast = useCallback(() => setToastMessage(null), []);
+  const [backendReadOnlyScreeningIds, setBackendReadOnlyScreeningIds] = useState<number[]>([]);
+  const markScreeningReadOnly = useCallback((screeningId: number) => {
+    setBackendReadOnlyScreeningIds((ids) => (
+      ids.includes(screeningId) ? ids : [...ids, screeningId]
+    ));
+  }, []);
+  const isScreeningReadOnly = useCallback(
+    (screening: Screening, now = new Date()) => (
+      backendReadOnlyScreeningIds.includes(screening.id)
+      || isScreeningPast(screening, cinemaTimezone, now)
+    ),
+    [backendReadOnlyScreeningIds, cinemaTimezone],
+  );
 
   const config = useCinemaConfigStore((state) => state.config);
   const configLoading = useCinemaConfigStore((state) => state.isLoading);
@@ -180,7 +199,7 @@ export default function ProgrammeScreen() {
   const openEditMoviePicker = async (screening: Screening, slot: string) => {
     if (
       !configAvailable
-      || isScreeningDateTimeInPast(screening.date, slot, cinemaTimezone, dateContextNow)
+      || isScreeningReadOnly(screening)
     ) return;
     setPendingSlot(toHHMM(slot));
     setEditingScreening(screening);
@@ -206,10 +225,20 @@ export default function ProgrammeScreen() {
 
   const handleSelectMovie = async (movie: Movie) => {
     if (!pendingSlot || !configAvailable) return;
-    if (isScreeningDateTimeInPast(selectedDateString, pendingSlot, cinemaTimezone, new Date())) {
+    const targetDate = toISODate(selectedDateString);
+    const targetTime = toHHMM(pendingSlot);
+    const isEditingPastScreening = editingScreening
+      ? isScreeningReadOnly(editingScreening)
+      : false;
+    if (
+      isEditingPastScreening
+      || isScreeningDateTimeInPast(targetDate, targetTime, cinemaTimezone, new Date())
+    ) {
       Alert.alert(
         'Séance dans le passé',
-        'Impossible de programmer une séance dans le passé.'
+        editingScreening
+          ? 'Cette séance est passée et ne peut plus être modifiée.'
+          : 'Impossible de programmer une séance dans le passé.'
       );
       return;
     }
@@ -219,14 +248,18 @@ export default function ProgrammeScreen() {
       try {
         const updatedScreening = await updateAdminScreening(editingScreening.id, {
           movieId: movie.id,
-          date: toISODate(selectedDateString),
-          showTime: toHHMM(pendingSlot),
+          date: targetDate,
+          showTime: targetTime,
         });
         if (!updatedScreening) return;
         closeModal();
         await fetchSchedule();
       } catch (error: unknown) {
         setSelectedMovieId(editingScreening.movieId);
+        const details = getApiErrorDetails(error);
+        if (details.code === 'SCREENING_PAST_READ_ONLY') {
+          markScreeningReadOnly(editingScreening.id);
+        }
         Alert.alert(
           'Modification impossible',
           getScreeningMutationErrorMessage(error, 'update') ||
@@ -240,8 +273,8 @@ export default function ProgrammeScreen() {
     try {
       const createdScreening = await createAdminScreening({
         movieId: movie.id,
-        date: toISODate(selectedDateString),
-        showTime: toHHMM(pendingSlot),
+        date: targetDate,
+        showTime: targetTime,
       });
       if (!createdScreening) return;
       closeModal();
@@ -264,11 +297,21 @@ export default function ProgrammeScreen() {
   };
 
   const performDelete = async (screening: Screening) => {
+    if (isScreeningReadOnly(screening)) return;
+
     try {
       const deleted = await deleteAdminScreening(screening.id);
       if (!deleted) return;
       await fetchSchedule();
     } catch (error: unknown) {
+      const details = getApiErrorDetails(error);
+      if (details.code === 'SCREENING_HAS_RESERVATIONS') {
+        setToastMessage(getScreeningMutationErrorMessage(error, 'delete'));
+        return;
+      }
+      if (details.code === 'SCREENING_PAST_READ_ONLY') {
+        markScreeningReadOnly(screening.id);
+      }
       Alert.alert(
         'Suppression impossible',
         getScreeningMutationErrorMessage(error, 'delete') ||
@@ -279,6 +322,8 @@ export default function ProgrammeScreen() {
   };
 
   const confirmDelete = (screening: Screening) => {
+    if (isScreeningReadOnly(screening)) return;
+
     clearDeleteError();
     Alert.alert(
       'Supprimer cette séance ?',
@@ -433,12 +478,7 @@ export default function ProgrammeScreen() {
                   dateContextNow
                 );
                 const isAssignedScreeningPast = screening
-                  ? isScreeningDateTimeInPast(
-                    screening.date,
-                    screening.showTime,
-                    cinemaTimezone,
-                    dateContextNow
-                  )
+                  ? isScreeningReadOnly(screening, dateContextNow)
                   : false;
                 const isUpdatingThisScreening =
                   isUpdatingScreening && updatingScreeningId === screening?.id;
@@ -468,6 +508,14 @@ export default function ProgrammeScreen() {
                             <Text style={styles.assignedMeta}>{movie.duration}</Text>
                           </View>
                         ) : null}
+                        {isAssignedScreeningPast ? (
+                          <View style={styles.readOnlyState}>
+                            <MaterialIcons name="lock-outline" size={15} color="#aa8986" />
+                            <Text style={styles.readOnlyText}>
+                              Lecture seule — les séances passées restent visibles.
+                            </Text>
+                          </View>
+                        ) : null}
                         <View style={styles.assignedActions}>
                           <TouchableOpacity
                             style={[
@@ -494,12 +542,21 @@ export default function ProgrammeScreen() {
                             <Text style={styles.assignedActionText}>Modifier</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
-                            style={styles.assignedActionButton}
+                            style={[
+                              styles.assignedActionButton,
+                              isAssignedScreeningPast && styles.assignedActionButtonDisabled,
+                            ]}
                             onPress={() => confirmDelete(screening)}
                             activeOpacity={0.8}
-                            disabled={isCreatingScreening || isUpdatingScreening || isDeletingScreening}
+                            disabled={
+                              isAssignedScreeningPast
+                              || isCreatingScreening
+                              || isUpdatingScreening
+                              || isDeletingScreening
+                            }
                             accessibilityRole="button"
                             accessibilityLabel={`Supprimer la séance de ${time}`}
+                            accessibilityState={{ disabled: isAssignedScreeningPast }}
                           >
                             {isDeletingThisScreening ? (
                               <ActivityIndicator size="small" color="#ffb4ac" />
@@ -540,6 +597,8 @@ export default function ProgrammeScreen() {
           </View>
         )}
       </ScrollView>
+
+      <Toast message={toastMessage} onDismiss={dismissToast} />
 
       <Modal
         animationType="slide"

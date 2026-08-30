@@ -16,6 +16,7 @@ export interface AuthStore {
   hydrated: boolean;
   login: (email: string, password: string) => Promise<AuthResult>;
   signup: (name: string, email: string, password: string) => Promise<AuthResult>;
+  updateProfile: (name: string) => Promise<User>;
   logout: () => Promise<void>;
   hydrate: () => Promise<void>;
 }
@@ -155,6 +156,23 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         message: getAuthErrorMessage(error, 'Échec de l\'inscription.'),
       };
     }
+  },
+
+  updateProfile: async (name) => {
+    const currentUser = get().user;
+    const token = get().token;
+    if (!currentUser || !token) {
+      throw new Error('Votre session a expiré. Veuillez vous reconnecter.');
+    }
+
+    const user = await AuthServiceInstance.updateProfile({ name });
+    if (!isStoredUser(user)) {
+      throw new Error('Réponse invalide du serveur : utilisateur manquant.');
+    }
+
+    await persistSession(token, user);
+    set({ user });
+    return user;
   },
 
   logout: async () => {

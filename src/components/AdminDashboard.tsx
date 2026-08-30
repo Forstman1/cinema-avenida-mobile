@@ -12,24 +12,14 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useFocusEffect,
-  useNavigation,
-  type CompositeNavigationProp,
 } from '@react-navigation/native';
-import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import CircularProgress from './CircularProgress';
 import ErrorState from './ErrorState';
-import type { MainTabParamList, RootStackParamList } from '../types/navigation';
 import { useAdminDashboardStore } from '../store/adminDashboardStore';
 import { useAuthStore } from '../store/authStore';
-
-type AdminHomeNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabParamList, 'Accueil'>,
-  NativeStackNavigationProp<RootStackParamList>
->;
 
 function toSafeNumber(value: number | null | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
@@ -68,7 +58,6 @@ function QuickStat({ icon, label, value }: QuickStatProps) {
 }
 
 export default function AdminDashboard() {
-  const navigation = useNavigation<AdminHomeNavigationProp>();
   const user = useAuthStore((state) => state.user);
   const insets = useSafeAreaInsets();
   const dashboard = useAdminDashboardStore((state) => state.dashboard);
@@ -82,14 +71,6 @@ export default function AdminDashboard() {
       void refreshDashboard();
     }, [refreshDashboard]),
   );
-
-  const handleManageMovies = () => {
-    navigation.navigate('Gestion');
-  };
-
-  const handleAddMovie = () => {
-    navigation.navigate('AddMovie');
-  };
 
   if (user?.role !== 'ADMIN') {
     return (
@@ -264,32 +245,6 @@ export default function AdminDashboard() {
           />
         </View>
 
-        <Text style={styles.sectionTitle}>Actions rapides</Text>
-        <View style={styles.actionsRow}>
-          <TouchableOpacity
-            style={styles.actionPrimary}
-            onPress={handleAddMovie}
-            activeOpacity={0.9}
-          >
-            <LinearGradient
-              colors={['#c22626', '#8f1818']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.actionPrimaryGradient}
-            >
-              <MaterialIcons name="add" size={20} color="#fff" />
-              <Text style={styles.actionPrimaryText}>Ajouter un film</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.actionSecondary]}
-            onPress={handleManageMovies}
-            activeOpacity={0.9}
-          >
-            <MaterialIcons name="movie" size={20} color="#e5e2e1" />
-            <Text style={styles.actionSecondaryText}>Gérer les films</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -540,50 +495,5 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#e5e2e1',
     marginBottom: 14,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: 14,
-    paddingVertical: 16,
-  },
-  actionPrimary: {
-    flex: 1,
-    borderRadius: 14,
-    overflow: 'hidden',
-    shadowColor: '#b22222',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  actionPrimaryGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-  },
-  actionSecondary: {
-    backgroundColor: '#201f1f',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  actionPrimaryText: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 14,
-    color: '#fff',
-  },
-  actionSecondaryText: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 14,
-    color: '#e5e2e1',
   },
 });

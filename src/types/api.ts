@@ -42,6 +42,12 @@ export interface SignupResponse {
   email: string;
 }
 
+export interface UpdateProfileRequest {
+  name: string;
+}
+
+export type UpdateProfileResponse = User;
+
 export interface AuthResult {
   success: boolean;
   message?: string;

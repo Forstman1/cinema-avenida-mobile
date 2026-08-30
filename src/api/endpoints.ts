@@ -2,6 +2,7 @@ export const adminDashboardUrl = () => '/admin/dashboard';
 
 export const loginUrl = () => '/auth/login';
 export const signupUrl = () => '/auth/signup';
+export const profileUrl = () => '/auth/me';
 
 export const cinemaConfigUrl = () => '/config';
 
