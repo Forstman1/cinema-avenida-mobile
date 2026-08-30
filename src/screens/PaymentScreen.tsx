@@ -16,39 +16,27 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { getApiErrorDetails, getApiErrorMessage } from '../api/errors';
+import { normalizePaymentReservation } from '../api/normalizers';
 import { useAuthStore } from '../store/authStore';
 import { useBookingsStore } from '../store/bookingsStore';
 import { useReservationStore } from '../store/reservationStore';
 import { parseLocalDate, toISODate } from '../utils/date';
 import {
+  formatReservationCountdown,
+  getRemainingReservationSeconds,
   getReservationLockExpiry,
   RESERVATION_EXPIRED_MESSAGE,
+  startReservationCountdown,
 } from '../utils/reservation-lock';
 import type {
   Movie,
   MovieReference,
-  MovieSummary,
-  Reservation,
-  ReservationScreening,
-  Screening,
   Seat,
 } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { PaymentScreenProps } from '../types/navigation';
 
 type PaymentNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Payment'>;
-
-function getRemainingSeconds(lockExpiry: number | null): number {
-  if (lockExpiry === null) return 0;
-  const remaining = Math.floor((lockExpiry - Date.now()) / 1000);
-  return Math.max(0, remaining);
-}
-
-function formatCountdown(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
 
 function formatFullDate(dateString: string): string {
   const date = parseLocalDate(toISODate(dateString));
@@ -64,60 +52,6 @@ const EMPTY_SEATS: Seat[] = [];
 
 function isCompleteMovie(movie: MovieReference): movie is Movie {
   return 'synopsis' in movie;
-}
-
-function toMovieSummary(movie: MovieReference): MovieSummary {
-  return { id: movie.id, title: movie.title, poster: movie.poster };
-}
-
-function normalizeReservationScreeningForPayment(
-  source: ReservationScreening | Screening | undefined,
-  movie: MovieReference | undefined
-): ReservationScreening | undefined {
-  if (!source) return undefined;
-
-  const movieSummary = 'movie' in source
-    ? source.movie
-    : movie
-      ? toMovieSummary(movie)
-      : undefined;
-  if (!movieSummary) return undefined;
-
-  return {
-    id: source.id,
-    date: toISODate(source.date),
-    showTime: source.showTime,
-    movieId: source.movieId,
-    movie: toMovieSummary(movieSummary),
-  };
-}
-
-function normalizeReservation(
-  source: Reservation | null | undefined,
-  movie: MovieReference | undefined,
-  screening: Screening | undefined,
-  seats: Seat[] | undefined
-): Reservation | null {
-  if (!source || !Number.isInteger(source.id)) return null;
-
-  const baseScreening = source.screening ?? screening;
-  const normalizedScreening = normalizeReservationScreeningForPayment(baseScreening, movie);
-
-  const reservationSeats = source.reservationSeats.length > 0
-    ? source.reservationSeats
-    : (seats ?? []).map((seat) => ({
-        id: seat.id,
-        seatId: seat.id,
-        seat,
-        reservationId: source.id,
-        lockedUntil: null,
-      }));
-
-  return {
-    ...source,
-    screening: normalizedScreening ?? source.screening,
-    reservationSeats,
-  };
 }
 
 export default function PaymentScreen({ route }: PaymentScreenProps) {
@@ -140,7 +74,7 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
     const source = routeReservation && Number.isInteger(routeReservation.id)
       ? routeReservation
       : storeReservation;
-    return normalizeReservation(source, movie, screening, routeSeats);
+    return normalizePaymentReservation(source, movie, screening, routeSeats);
   }, [movie, routeReservation, routeSeats, screening, storeReservation]);
 
   const seats = useMemo(
@@ -173,14 +107,14 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
   ]);
 
   const [remainingSeconds, setRemainingSeconds] = useState(() =>
-    getRemainingSeconds(reservationLockExpiry)
+    getRemainingReservationSeconds(reservationLockExpiry)
   );
   const [expired, setExpired] = useState(false);
 
   const seatLabels = useMemo(() => seats.map((s) => `${s.row}${s.number}`).join(', '), [seats]);
 
   useEffect(() => {
-    const remaining = getRemainingSeconds(reservationLockExpiry);
+    const remaining = getRemainingReservationSeconds(reservationLockExpiry);
     setExpired(remaining <= 0);
     setRemainingSeconds(remaining);
   }, [reservationLockExpiry]);
@@ -213,16 +147,10 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
   useEffect(() => {
     if (reservationLockExpiry === null || expired) return;
 
-    const updateRemaining = () => {
-      const remaining = getRemainingSeconds(reservationLockExpiry);
+    return startReservationCountdown(reservationLockExpiry, (remaining) => {
       setRemainingSeconds(remaining);
       if (remaining <= 0) handleExpiration();
-    };
-
-    updateRemaining();
-    const interval = setInterval(updateRemaining, 1000);
-
-    return () => clearInterval(interval);
+    });
   }, [expired, handleExpiration, reservationLockExpiry]);
 
   const isExpired = expired || remainingSeconds <= 0;
@@ -332,7 +260,7 @@ export default function PaymentScreen({ route }: PaymentScreenProps) {
         <View style={[styles.countdownBanner, isUrgent && styles.countdownBannerUrgent]}>
           <MaterialIcons name="timer" size={20} color={isUrgent ? '#fff' : '#e2beba'} />
           <Text style={[styles.countdownText, isUrgent && styles.countdownTextUrgent]}>
-            Il vous reste {formatCountdown(remainingSeconds)} pour confirmer
+            Il vous reste {formatReservationCountdown(remainingSeconds)} pour confirmer
           </Text>
         </View>
 

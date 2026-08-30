@@ -22,6 +22,7 @@ import {
 } from '../api/errors';
 import ErrorState from '../components/ErrorState';
 import Toast from '../components/Toast';
+import { useAdminScreeningActions } from '../hooks/useAdminScreeningActions';
 import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 import { useAdminScreeningsStore } from '../store/adminScreeningsStore';
 import {
@@ -29,7 +30,6 @@ import {
   formatCalendarDate,
   getTodayDateString,
   isScreeningDateTimeInPast,
-  isScreeningPast,
   parseLocalDate,
   toHHMM,
   toISODate,
@@ -39,12 +39,12 @@ import type { Movie, Screening } from '../types';
 import type { ManageScreeningsScreenProps } from '../types/navigation';
 
 function groupScreeningsByDate(screenings: Screening[]): Record<string, Screening[]> {
-  return screenings.reduce((acc, screening) => {
+  return screenings.reduce<Record<string, Screening[]>>((acc, screening) => {
     const date = toISODate(screening.date);
     if (!acc[date]) acc[date] = [];
     acc[date].push(screening);
     return acc;
-  }, {} as Record<string, Screening[]>);
+  }, {});
 }
 
 const EMPTY_SCREENING_IDS: number[] = [];
@@ -80,19 +80,22 @@ export default function ManageScreeningsScreen({
   const fetchScreeningsByMovieId = useAdminScreeningsStore(
     (state) => state.fetchScreeningsByMovieId
   );
-  const createAdminScreening = useAdminScreeningsStore((state) => state.createScreening);
-  const isCreatingScreening = useAdminScreeningsStore((state) => state.isCreatingScreening);
-  const createScreeningError = useAdminScreeningsStore((state) => state.createScreeningError);
-  const updateAdminScreening = useAdminScreeningsStore((state) => state.updateScreening);
-  const isUpdatingScreening = useAdminScreeningsStore((state) => state.isUpdatingScreening);
-  const updatingScreeningId = useAdminScreeningsStore((state) => state.updatingScreeningId);
-  const updateScreeningError = useAdminScreeningsStore((state) => state.updateScreeningError);
-  const deleteAdminScreening = useAdminScreeningsStore((state) => state.deleteScreening);
-  const isDeletingScreening = useAdminScreeningsStore((state) => state.isDeletingScreening);
-  const deletingScreeningId = useAdminScreeningsStore((state) => state.deletingScreeningId);
-  const deleteScreeningError = useAdminScreeningsStore((state) => state.deleteScreeningError);
-  const clearUpdateError = useAdminScreeningsStore((state) => state.clearUpdateError);
-  const clearDeleteError = useAdminScreeningsStore((state) => state.clearDeleteError);
+  const {
+    createScreening: createAdminScreening,
+    isCreatingScreening,
+    createScreeningError,
+    updateScreening: updateAdminScreening,
+    isUpdatingScreening,
+    updatingScreeningId,
+    updateScreeningError,
+    deleteScreening: deleteAdminScreening,
+    isDeletingScreening,
+    deletingScreeningId,
+    deleteScreeningError,
+    clearUpdateError,
+    clearDeleteError,
+    isScreeningReadOnly,
+  } = useAdminScreeningActions(cinemaTimezone);
 
   const [date, setDate] = useState<string>('');
   const hasEditedDate = useRef(false);
@@ -103,19 +106,6 @@ export default function ManageScreeningsScreen({
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const dismissToast = useCallback(() => setToastMessage(null), []);
-  const [backendReadOnlyScreeningIds, setBackendReadOnlyScreeningIds] = useState<number[]>([]);
-  const markScreeningReadOnly = useCallback((screeningId: number) => {
-    setBackendReadOnlyScreeningIds((ids) => (
-      ids.includes(screeningId) ? ids : [...ids, screeningId]
-    ));
-  }, []);
-  const isScreeningReadOnly = useCallback(
-    (screening: Screening, now = new Date()) => (
-      backendReadOnlyScreeningIds.includes(screening.id)
-      || isScreeningPast(screening, cinemaTimezone, now)
-    ),
-    [backendReadOnlyScreeningIds, cinemaTimezone],
-  );
 
   useEffect(() => {
     if (!hasEditedDate.current) setDate(todayDate);
@@ -280,10 +270,6 @@ export default function ManageScreeningsScreen({
       closeEditModal();
       await fetchScreenings();
     } catch (error: unknown) {
-      const details = getApiErrorDetails(error);
-      if (details.code === 'SCREENING_PAST_READ_ONLY') {
-        markScreeningReadOnly(editScreening.id);
-      }
       Alert.alert(
         'Modification impossible',
         getScreeningMutationErrorMessage(error, 'update') ||
@@ -305,9 +291,6 @@ export default function ManageScreeningsScreen({
       if (details.code === 'SCREENING_HAS_RESERVATIONS') {
         setToastMessage(getScreeningMutationErrorMessage(error, 'delete'));
         return;
-      }
-      if (details.code === 'SCREENING_PAST_READ_ONLY') {
-        markScreeningReadOnly(screening.id);
       }
       Alert.alert(
         'Suppression impossible',

@@ -217,8 +217,7 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
       dateErrors: { ...get().dateErrors, [dateKey]: null },
     });
 
-    let request: Promise<Screening[]> | null = null;
-    request = (async () => {
+    const request = (async () => {
       try {
         const response = await MovieServiceInstance.getScreeningsByDate(dateKey);
         if (
@@ -266,13 +265,18 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
             isRefreshingByDate: { ...get().isRefreshingByDate, [dateKey]: false },
           });
         }
-        if (inFlightDateRequests.get(dateKey) === request) inFlightDateRequests.delete(dateKey);
+        if (
+          generation === adminScreeningsGeneration
+          && dataVersion === adminScreeningsDataVersion
+          && dateRequestIds.get(dateKey) === requestId
+        ) {
+          inFlightDateRequests.delete(dateKey);
+        }
       }
     })();
 
-    const startedRequest = request as Promise<Screening[]>;
-    inFlightDateRequests.set(dateKey, startedRequest);
-    return startedRequest;
+    inFlightDateRequests.set(dateKey, request);
+    return request;
   },
 
   refreshScreeningsByDate: async (date) => get().fetchScreeningsByDate(date, { force: true }),
@@ -301,8 +305,7 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
       movieErrors: { ...get().movieErrors, [movieId]: null },
     });
 
-    let request: Promise<Screening[]> | null = null;
-    request = (async () => {
+    const request = (async () => {
       try {
         const screenings = await MovieServiceInstance.getScreeningsByMovieId(movieId);
         if (
@@ -337,13 +340,18 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
             isRefreshingByMovieId: { ...get().isRefreshingByMovieId, [movieId]: false },
           });
         }
-        if (inFlightMovieRequests.get(movieId) === request) inFlightMovieRequests.delete(movieId);
+        if (
+          generation === adminScreeningsGeneration
+          && dataVersion === adminScreeningsDataVersion
+          && movieRequestIds.get(movieId) === requestId
+        ) {
+          inFlightMovieRequests.delete(movieId);
+        }
       }
     })();
 
-    const startedRequest = request as Promise<Screening[]>;
-    inFlightMovieRequests.set(movieId, startedRequest);
-    return startedRequest;
+    inFlightMovieRequests.set(movieId, request);
+    return request;
   },
 
   refreshScreeningsByMovieId: async (movieId) =>

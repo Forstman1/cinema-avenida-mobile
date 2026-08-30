@@ -24,6 +24,7 @@ import {
 import ErrorState from '../components/ErrorState';
 import PosterImage from '../components/PosterImage';
 import Toast from '../components/Toast';
+import { useAdminScreeningActions } from '../hooks/useAdminScreeningActions';
 import { useAdminMoviesStore } from '../store/adminMoviesStore';
 import { useAdminScreeningsStore } from '../store/adminScreeningsStore';
 import { useCinemaConfigStore } from '../store/cinemaConfigStore';
@@ -38,7 +39,6 @@ import {
   getTodayDateString,
   getWeekdayIndex,
   isScreeningDateTimeInPast,
-  isScreeningPast,
   toHHMM,
   toISODate,
 } from '../utils/date';
@@ -99,36 +99,26 @@ export default function ProgrammeScreen() {
     (state) => state.dateErrors[selectedDateString] ?? null
   );
   const fetchScreeningsByDate = useAdminScreeningsStore((state) => state.fetchScreeningsByDate);
-  const createAdminScreening = useAdminScreeningsStore((state) => state.createScreening);
-  const isCreatingScreening = useAdminScreeningsStore((state) => state.isCreatingScreening);
-  const createScreeningError = useAdminScreeningsStore((state) => state.createScreeningError);
-  const clearCreateError = useAdminScreeningsStore((state) => state.clearCreateError);
-  const updateAdminScreening = useAdminScreeningsStore((state) => state.updateScreening);
-  const isUpdatingScreening = useAdminScreeningsStore((state) => state.isUpdatingScreening);
-  const updatingScreeningId = useAdminScreeningsStore((state) => state.updatingScreeningId);
-  const updateScreeningError = useAdminScreeningsStore((state) => state.updateScreeningError);
-  const deleteAdminScreening = useAdminScreeningsStore((state) => state.deleteScreening);
-  const isDeletingScreening = useAdminScreeningsStore((state) => state.isDeletingScreening);
-  const deletingScreeningId = useAdminScreeningsStore((state) => state.deletingScreeningId);
-  const deleteScreeningError = useAdminScreeningsStore((state) => state.deleteScreeningError);
-  const clearUpdateError = useAdminScreeningsStore((state) => state.clearUpdateError);
-  const clearDeleteError = useAdminScreeningsStore((state) => state.clearDeleteError);
+  const {
+    createScreening: createAdminScreening,
+    isCreatingScreening,
+    createScreeningError,
+    clearCreateError,
+    updateScreening: updateAdminScreening,
+    isUpdatingScreening,
+    updatingScreeningId,
+    updateScreeningError,
+    deleteScreening: deleteAdminScreening,
+    isDeletingScreening,
+    deletingScreeningId,
+    deleteScreeningError,
+    clearUpdateError,
+    clearDeleteError,
+    isScreeningReadOnly,
+  } = useAdminScreeningActions(cinemaTimezone);
   const [refreshing, setRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const dismissToast = useCallback(() => setToastMessage(null), []);
-  const [backendReadOnlyScreeningIds, setBackendReadOnlyScreeningIds] = useState<number[]>([]);
-  const markScreeningReadOnly = useCallback((screeningId: number) => {
-    setBackendReadOnlyScreeningIds((ids) => (
-      ids.includes(screeningId) ? ids : [...ids, screeningId]
-    ));
-  }, []);
-  const isScreeningReadOnly = useCallback(
-    (screening: Screening, now = new Date()) => (
-      backendReadOnlyScreeningIds.includes(screening.id)
-      || isScreeningPast(screening, cinemaTimezone, now)
-    ),
-    [backendReadOnlyScreeningIds, cinemaTimezone],
-  );
 
   const config = useCinemaConfigStore((state) => state.config);
   const configLoading = useCinemaConfigStore((state) => state.isLoading);
@@ -256,10 +246,6 @@ export default function ProgrammeScreen() {
         await fetchSchedule();
       } catch (error: unknown) {
         setSelectedMovieId(editingScreening.movieId);
-        const details = getApiErrorDetails(error);
-        if (details.code === 'SCREENING_PAST_READ_ONLY') {
-          markScreeningReadOnly(editingScreening.id);
-        }
         Alert.alert(
           'Modification impossible',
           getScreeningMutationErrorMessage(error, 'update') ||
@@ -308,9 +294,6 @@ export default function ProgrammeScreen() {
       if (details.code === 'SCREENING_HAS_RESERVATIONS') {
         setToastMessage(getScreeningMutationErrorMessage(error, 'delete'));
         return;
-      }
-      if (details.code === 'SCREENING_PAST_READ_ONLY') {
-        markScreeningReadOnly(screening.id);
       }
       Alert.alert(
         'Suppression impossible',

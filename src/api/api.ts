@@ -7,8 +7,14 @@ const TOKEN_STORAGE_KEY = 'token';
 
 type HttpMethod = 'DELETE' | 'GET' | 'PATCH' | 'POST' | 'PUT';
 
+type ApiRequestParameter = string | number | boolean | null | undefined;
+type ApiRequestParameters = Record<
+  string,
+  ApiRequestParameter | readonly ApiRequestParameter[]
+>;
+
 export interface ApiRequestOptions {
-  params?: object;
+  params?: ApiRequestParameters;
 }
 
 export interface ApiResponse<T> {
@@ -56,13 +62,13 @@ export function Api() {
   return apiClient;
 }
 
-function buildUrl(path: string, params?: object): string {
+function buildUrl(path: string, params?: ApiRequestParameters): string {
   const baseUrl = API_BASE_URL.replace(/\/$/, '');
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   const url = new URL(`${baseUrl}${normalizedPath}`);
 
   if (params) {
-    Object.entries(params as Record<string, unknown>).forEach(([key, value]) => {
+    Object.entries(params).forEach(([key, value]) => {
       if (value === undefined || value === null) return;
       if (Array.isArray(value)) {
         value.forEach((item) => url.searchParams.append(key, String(item)));

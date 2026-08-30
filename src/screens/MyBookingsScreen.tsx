@@ -25,8 +25,11 @@ import { useBookingsStore } from '../store/bookingsStore';
 import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 import { formatScreeningDate, getScreeningDateTime } from '../utils/date';
 import {
+  formatReservationCountdown,
+  getRemainingReservationSeconds,
   getReservationLockExpiry,
   RESERVATION_EXPIRED_MESSAGE,
+  startReservationCountdown,
 } from '../utils/reservation-lock';
 import { useReservationStore } from '../store/reservationStore';
 import type { Reservation, Seat } from '../types';
@@ -96,18 +99,6 @@ function getExpiredPendingReservation(reservations: Reservation[]): Reservation 
   return null;
 }
 
-function getRemainingSeconds(reservation: Reservation | null | undefined): number {
-  const lockExpiry = getReservationLockExpiry(reservation);
-  if (lockExpiry === null) return 0;
-  return Math.max(0, Math.floor((lockExpiry - Date.now()) / 1000));
-}
-
-function formatCountdown(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
-
 function formatSeatsLabel(seats: Seat[]): string {
   if (seats.length === 0) return '-';
   const sorted = [...seats].sort((a, b) => {
@@ -161,7 +152,9 @@ export default function MyBookingsScreen() {
   );
 
   useEffect(() => {
-    setRemainingSeconds(getRemainingSeconds(pendingReservation));
+    setRemainingSeconds(
+      getRemainingReservationSeconds(getReservationLockExpiry(pendingReservation))
+    );
   }, [pendingReservation]);
 
   const handlePendingExpiration = useCallback(async (reservation: Reservation) => {
@@ -194,8 +187,7 @@ export default function MyBookingsScreen() {
       return;
     }
 
-    const updateRemaining = () => {
-      const remaining = getRemainingSeconds(pendingReservation);
+    return startReservationCountdown(getReservationLockExpiry(pendingReservation), (remaining) => {
       setRemainingSeconds(remaining);
       if (
         remaining <= 0 &&
@@ -204,11 +196,7 @@ export default function MyBookingsScreen() {
         expirationHandledReservationId.current = pendingReservation.id;
         void handlePendingExpiration(pendingReservation);
       }
-    };
-
-    updateRemaining();
-    const interval = setInterval(updateRemaining, 1000);
-    return () => clearInterval(interval);
+    });
   }, [handlePendingExpiration, pendingReservation]);
 
   useFocusEffect(
@@ -512,7 +500,9 @@ export default function MyBookingsScreen() {
                 <MaterialIcons name="timer" size={14} color="#ffb4ac" />
                 <Text style={styles.pendingTitle}>PAIEMENT EN COURS</Text>
               </View>
-              <Text style={styles.pendingCountdown}>{formatCountdown(remainingSeconds)}</Text>
+              <Text style={styles.pendingCountdown}>
+                {formatReservationCountdown(remainingSeconds)}
+              </Text>
             </View>
             <Text style={styles.pendingMovie} numberOfLines={1}>
               {pendingReservation.screening?.movie?.title}

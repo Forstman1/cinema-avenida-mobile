@@ -20,8 +20,10 @@ import ErrorState from '../components/ErrorState';
 import { useReservationStore } from '../store/reservationStore';
 import { useCinemaConfigStore } from '../store/cinemaConfigStore';
 import {
+  formatReservationCountdown,
   getReservationLockExpiry,
   RESERVATION_EXPIRED_MESSAGE,
+  startReservationCountdown,
 } from '../utils/reservation-lock';
 import type { Seat, SeatCategory, SeatStatus } from '../types';
 import type { RootStackParamList } from '../types/navigation';
@@ -70,17 +72,6 @@ function groupSeatsByRow(seats: Seat[]): SeatRow[] {
       name,
       seats: [...rowSeats].sort((a, b) => a.number - b.number),
     }));
-}
-
-function getRemainingSeconds(lockExpiry: number | null): number {
-  if (lockExpiry === null) return 0;
-  return Math.max(0, Math.floor((lockExpiry - Date.now()) / 1000));
-}
-
-function formatCountdown(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 export default function SeatMapScreen({ route }: SeatMapScreenProps) {
@@ -137,18 +128,13 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
       return;
     }
 
-    const updateRemaining = () => {
-      const remaining = getRemainingSeconds(pendingLockExpiry);
+    return startReservationCountdown(pendingLockExpiry, (remaining) => {
       setPendingRemaining(remaining);
       if (remaining <= 0) {
         void expirePendingReservation(screening?.id ?? null);
         Alert.alert('Réservation expirée', RESERVATION_EXPIRED_MESSAGE);
       }
-    };
-
-    updateRemaining();
-    const interval = setInterval(updateRemaining, 1000);
-    return () => clearInterval(interval);
+    });
   }, [expirePendingReservation, pendingLockExpiry, pendingReservation, screening?.id]);
 
   const handleContinuePayment = () => {
@@ -392,7 +378,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
           <View style={styles.pendingBannerInfo}>
             <MaterialIcons name="timer" size={16} color="#ffb4ac" />
             <Text style={styles.pendingBannerText} numberOfLines={1}>
-              ⏱ Réservation en cours · {formatCountdown(pendingRemaining)}
+              ⏱ Réservation en cours · {formatReservationCountdown(pendingRemaining)}
             </Text>
           </View>
           <Text style={styles.pendingBannerMovie} numberOfLines={1}>

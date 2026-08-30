@@ -196,9 +196,9 @@ export interface AdminDashboard {
   quickStats: AdminQuickStats;
 }
 
-export interface GetMoviesRequest {
+export type GetMoviesRequest = {
   current?: boolean;
-}
+};
 export type GetMoviesResponse = Movie[];
 export type GetMovieByIdRequest = number;
 export type GetMovieByIdResponse = Movie;
