@@ -17,7 +17,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import ErrorState from '../components/ErrorState';
 import { formatDuration, formatScreeningDate, getNextScreening } from '../utils/date';
-import type { Movie, Screening } from '../types';
+import type { Screening } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 import type { MovieDetailsScreenProps } from '../types/navigation';
 import { useMoviesStore } from '../store/moviesStore';

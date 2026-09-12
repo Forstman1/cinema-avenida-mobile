@@ -19,7 +19,7 @@ import { useAdminMoviesStore } from '../store/adminMoviesStore';
 import type { Movie } from '../types';
 import type { RootStackParamList } from '../types/navigation';
 
-type AdminNavigationProp = NativeStackNavigationProp<RootStackParamList, 'AdminMovies'>;
+type AdminNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function AdminMoviesScreen() {
   const navigation = useNavigation<AdminNavigationProp>();

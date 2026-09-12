@@ -31,15 +31,40 @@ import type { SeatMapScreenProps } from '../types/navigation';
 
 type SeatMapNavigationProp = NativeStackNavigationProp<RootStackParamList, 'SeatMap'>;
 
-const CATEGORY_CONFIG: Record<
-  SeatCategory,
-  { color: string; borderColor: string; label: string }
-> = {
-  CLUB: { color: '#c9a227', borderColor: 'rgba(201,162,39,0.6)', label: 'Club' },
-  NORMAL: { color: '#5a8bbf', borderColor: 'rgba(90,139,191,0.6)', label: 'Normal' },
-  VIP: { color: '#8b5cf6', borderColor: 'rgba(139,92,246,0.6)', label: 'VIP' },
+type CategoryPresentation = {
+  color: string;
+  borderColor: string;
+  label: string;
 };
-const SEAT_CATEGORIES: SeatCategory[] = ['CLUB', 'NORMAL', 'VIP'];
+
+const CATEGORY_PALETTE: ReadonlyArray<Omit<CategoryPresentation, 'label'>> = [
+  { color: '#c9a227', borderColor: 'rgba(201,162,39,0.6)' },
+  { color: '#5a8bbf', borderColor: 'rgba(90,139,191,0.6)' },
+  { color: '#8b5cf6', borderColor: 'rgba(139,92,246,0.6)' },
+];
+
+function formatCategoryLabel(category: SeatCategory): string {
+  const words = category.trim().toLowerCase().split(/[_\s-]+/).filter(Boolean);
+  if (words.length === 0) return 'Catégorie';
+
+  return words
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function getCategoryPresentation(category: SeatCategory): CategoryPresentation {
+  const normalizedCategory = category.trim();
+  const hash = Array.from(normalizedCategory).reduce(
+    (total, character) => total + character.charCodeAt(0),
+    0,
+  );
+  const palette = CATEGORY_PALETTE[hash % CATEGORY_PALETTE.length];
+
+  return {
+    ...palette,
+    label: formatCategoryLabel(normalizedCategory),
+  };
+}
 
 function isSeatTappable(status: SeatStatus): boolean {
   return status === 'LIBRE';
@@ -187,14 +212,16 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
 
   const totalPrice = useMemo(() => {
     if (!config) return null;
-    return selectedSeats.reduce((sum, seat) => sum + config.seatCategories[seat.category], 0);
+    const prices = selectedSeats.map((seat) => config.seatCategories[seat.category]);
+    if (prices.some((price) => !Number.isFinite(price))) return null;
+    return prices.reduce((sum, price) => sum + price, 0);
   }, [config, selectedSeats]);
 
   const selectedLabel = useMemo(() => {
     if (selectedSeats.length === 0) return '';
     const labels = selectedSeats.map((s) => `${s.row}${s.number}`).join(', ');
     const category = selectedSeats[0].category;
-    return `${labels} (${CATEGORY_CONFIG[category].label})`;
+    return `${labels} (${getCategoryPresentation(category).label})`;
   }, [selectedSeats]);
 
   const handleConfirm = async () => {
@@ -253,7 +280,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     const isSelected = seat.status === 'LIBRE' && selectedIds.has(seat.id);
     const tappable = !hasPendingReservation && isSeatTappable(seat.status);
     const category = seat.category;
-    const config = CATEGORY_CONFIG[category];
+    const categoryPresentation = getCategoryPresentation(category);
 
     let seatStyle;
     if (isSelected) {
@@ -266,7 +293,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     } else {
       seatStyle = [
         styles.seat,
-        { borderColor: config.borderColor },
+        { borderColor: categoryPresentation.borderColor },
       ];
     }
 
@@ -432,15 +459,24 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
         <View style={styles.legendCard}>
           <Text style={styles.legendTitle}>Légende & Tarifs</Text>
           <View style={styles.legendGrid}>
-            {SEAT_CATEGORIES.map((cat) => (
-              <View key={cat} style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: CATEGORY_CONFIG[cat].color }]} />
-                <View>
-                  <Text style={styles.legendName}>{CATEGORY_CONFIG[cat].label}</Text>
-                  <Text style={styles.legendPrice}>{config.seatCategories[cat]} DH</Text>
+            {Object.entries(config.seatCategories).map(([category, price]) => {
+              const categoryPresentation = getCategoryPresentation(category);
+
+              return (
+                <View key={category} style={styles.legendItem}>
+                  <View
+                    style={[
+                      styles.legendDot,
+                      { backgroundColor: categoryPresentation.color },
+                    ]}
+                  />
+                  <View>
+                    <Text style={styles.legendName}>{categoryPresentation.label}</Text>
+                    <Text style={styles.legendPrice}>{price} DH</Text>
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
             <View style={styles.legendItem}>
               <View style={[styles.legendSeat, styles.seatSelected]} />
               <Text style={styles.legendName}>Sélectionné</Text>
@@ -465,7 +501,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
             {selectedSeats.length > 0 ? selectedLabel : 'Aucun siège sélectionné'}
           </Text>
           <Text style={styles.bottomBarTotal}>
-            {totalPrice} <Text style={styles.bottomBarCurrency}>DH</Text>{' '}
+            {totalPrice ?? '—'} <Text style={styles.bottomBarCurrency}>DH</Text>{' '}
             <Text style={styles.bottomBarTotalLabel}>Total</Text>
           </Text>
         </View>

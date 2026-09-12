@@ -28,7 +28,6 @@ export interface BookingsStore {
   setLastCompletedBooking: (booking: CompletedBooking) => void;
   selectBooking: (booking: CompletedBooking | null) => void;
   clearBookings: () => void;
-  clearLastCompletedBooking: () => void;
 }
 
 function markReservationCancelled(reservation: Reservation): Reservation {
@@ -175,15 +174,5 @@ export const useBookingsStore = create<BookingsStore>((set, get) => {
       });
     },
 
-    clearLastCompletedBooking: () => {
-      const lastCompletedBooking = get().lastCompletedBooking;
-      set({
-        lastCompletedBooking: null,
-        selectedBooking:
-          get().selectedBooking?.reservation.id === lastCompletedBooking?.reservation.id
-            ? null
-            : get().selectedBooking,
-      });
-    },
   };
 });

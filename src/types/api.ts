@@ -1,6 +1,7 @@
 export type UserRole = 'CLIENT' | 'ADMIN';
 export type SeatStatus = 'LIBRE' | 'OCCUPE' | 'VERROUILLE';
-export type SeatCategory = 'CLUB' | 'NORMAL' | 'VIP';
+/** Seat categories are defined by the cinema configuration returned by the API. */
+export type SeatCategory = string;
 export type ReservationStatus = 'EN_ATTENTE' | 'CONFIRMED' | 'CANCELLED';
 export type TicketStatus = 'VALID' | 'CANCELLED';
 

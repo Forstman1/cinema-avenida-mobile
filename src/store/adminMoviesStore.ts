@@ -15,7 +15,6 @@ export interface AdminMoviesStore {
   fetchMovies: () => Promise<void>;
   createMovie: (payload: MovieRequest) => Promise<Movie | null>;
   updateMovie: (movieId: number, payload: MovieRequest) => Promise<Movie | null>;
-  clearMovies: () => void;
   clearErrors: () => void;
   reset: () => void;
 }
@@ -113,18 +112,6 @@ export const useAdminMoviesStore = create<AdminMoviesStore>((set, get) => ({
         set({ isSubmitting: false });
       }
     }
-  },
-
-  clearMovies: () => {
-    adminMoviesGeneration += 1;
-    adminMoviesRequestId += 1;
-    inFlightAdminMoviesRequest = null;
-    set({
-      movies: [],
-      lastSavedMovie: null,
-      isLoadingMovies: false,
-      isRefreshingMovies: false,
-    });
   },
 
   clearErrors: () => {

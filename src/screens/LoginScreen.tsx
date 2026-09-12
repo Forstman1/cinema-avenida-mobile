@@ -105,12 +105,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
             </View>
 
             <View style={styles.field}>
-              <View style={styles.labelRow}>
-                <Text style={styles.label}>MOT DE PASSE</Text>
-                <TouchableOpacity onPress={() => {}}>
-                  <Text style={styles.forgot}>Oublié ?</Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={styles.label}>MOT DE PASSE</Text>
               <View
                 style={[
                   styles.inputRow,
@@ -146,7 +141,16 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
               </View>
             </View>
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? (
+              <Text
+                accessibilityRole="alert"
+                numberOfLines={2}
+                ellipsizeMode="tail"
+                style={styles.error}
+              >
+                {error}
+              </Text>
+            ) : null}
 
             <TouchableOpacity
               style={[styles.button, isLoading && styles.buttonDisabled]}
@@ -241,23 +245,12 @@ const styles = StyleSheet.create({
   field: {
     gap: 6,
   },
-  labelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
   label: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 12,
     letterSpacing: 0.6,
     color: '#e2beba',
     textTransform: 'uppercase',
-  },
-  forgot: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 12,
-    letterSpacing: 0.6,
-    color: 'rgba(226,190,186,0.7)',
   },
   inputRow: {
     flexDirection: 'row',
@@ -284,7 +277,8 @@ const styles = StyleSheet.create({
   },
   error: {
     fontFamily: 'Inter-Medium',
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: 18,
     color: '#ffb4ab',
     textAlign: 'center',
   },

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { API_BASE_URL } from '../config/api';
 import type { ApiErrorBody } from '../types';
+import { getSafeErrorText } from './safe-error';
 
 const TOKEN_STORAGE_KEY = 'token';
 
@@ -90,13 +91,20 @@ function getHeader(headers: Headers, name: string): string | null {
 }
 
 function getErrorMessage(body: ApiErrorBody | string | null, status: number): string {
-  if (typeof body === 'string' && body.trim()) return body;
+  const textMessage = getSafeErrorText(body);
+  if (textMessage) return textMessage;
   if (isRecord(body)) {
-    if (typeof body.message === 'string' && body.message.trim()) return body.message;
+    const message = getSafeErrorText(body.message);
+    if (message) return message;
     if (Array.isArray(body.message) && body.message.length > 0) {
-      return body.message.join(', ');
+      const messages = body.message
+        .map((item) => getSafeErrorText(item))
+        .filter((item): item is string => Boolean(item));
+      const joinedMessage = getSafeErrorText(messages.join(', '));
+      if (joinedMessage) return joinedMessage;
     }
-    if (typeof body.error === 'string' && body.error.trim()) return body.error;
+    const error = getSafeErrorText(body.error);
+    if (error) return error;
   }
   return `La requête a échoué (${status}).`;
 }

@@ -31,7 +31,6 @@ export type RootStackParamList = {
   SeatMap: { movie: Movie; screening: Screening };
   Payment: { movie: MovieReference; screening: ScreeningReference; reservation: Reservation; seats: Seat[] };
   Ticket: { movie: MovieReference; screening: ScreeningReference; reservation: Reservation; ticket: Ticket; seats: Seat[] };
-  AdminMovies: undefined;
   AddMovie: { movie?: Movie } | undefined;
   ManageScreenings: { movie: Movie };
   Programme: undefined;
@@ -45,7 +44,6 @@ export type ScreeningsScreenProps = NativeStackScreenProps<RootStackParamList, '
 export type SeatMapScreenProps = NativeStackScreenProps<RootStackParamList, 'SeatMap'>;
 export type PaymentScreenProps = NativeStackScreenProps<RootStackParamList, 'Payment'>;
 export type TicketScreenProps = NativeStackScreenProps<RootStackParamList, 'Ticket'>;
-export type AdminMoviesScreenProps = NativeStackScreenProps<RootStackParamList, 'AdminMovies'>;
 export type AddMovieScreenProps = NativeStackScreenProps<RootStackParamList, 'AddMovie'>;
 export type ManageScreeningsScreenProps = NativeStackScreenProps<RootStackParamList, 'ManageScreenings'>;
 export type ProgrammeScreenProps = NativeStackScreenProps<RootStackParamList, 'Programme'>;

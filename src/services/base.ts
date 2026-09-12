@@ -24,7 +24,7 @@ export abstract class BaseService {
 
     const details = getApiErrorDetails(error);
     throw new ServiceError(
-      details.message || 'An unexpected error occurred',
+      details.message || 'Une erreur inattendue est survenue. Veuillez réessayer.',
       details.status ?? undefined,
       details.code,
     );

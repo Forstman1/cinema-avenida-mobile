@@ -35,7 +35,7 @@ import {
   toISODate,
 } from '../utils/date';
 import { useCinemaDateContext } from '../hooks/useCinemaDateContext';
-import type { Movie, Screening } from '../types';
+import type { Screening } from '../types';
 import type { ManageScreeningsScreenProps } from '../types/navigation';
 
 function groupScreeningsByDate(screenings: Screening[]): Record<string, Screening[]> {

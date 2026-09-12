@@ -1,5 +1,6 @@
 import { ApiTransportError, type ApiResponse } from './api';
 import type { ApiError, ApiErrorBody, ApiErrorDetails } from '../types';
+import { getSafeErrorText } from './safe-error';
 
 const NETWORK_ERROR_MESSAGE =
   "Impossible de joindre le serveur. Vérifiez l'adresse IP ou votre connexion.";
@@ -45,11 +46,20 @@ function getStatusMessage(status: number | null, isNetworkError: boolean): strin
 }
 
 function getBodyMessage(body: ApiErrorBody | string | null): string | null {
-  if (typeof body === 'string' && body.trim()) return body;
+  const textMessage = getSafeErrorText(body);
+  if (textMessage) return textMessage;
   if (!isRecord(body)) return null;
-  if (typeof body?.message === 'string' && body.message.trim()) return body.message;
-  if (Array.isArray(body?.message) && body.message.length > 0) return body.message.join(', ');
-  if (typeof body?.error === 'string' && body.error.trim()) return body.error;
+  const message = getSafeErrorText(body.message);
+  if (message) return message;
+  if (Array.isArray(body.message) && body.message.length > 0) {
+    const messages = body.message
+      .map((item) => getSafeErrorText(item))
+      .filter((item): item is string => Boolean(item));
+    const joinedMessage = getSafeErrorText(messages.join(', '));
+    if (joinedMessage) return joinedMessage;
+  }
+  const error = getSafeErrorText(body.error);
+  if (error) return error;
   return null;
 }
 

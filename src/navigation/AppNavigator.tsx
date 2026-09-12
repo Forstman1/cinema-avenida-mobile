@@ -101,7 +101,6 @@ function RootNavigator() {
       <RootStack.Screen name="SeatMap" component={SeatMapScreen} />
       <RootStack.Screen name="Payment" component={PaymentScreen} />
       <RootStack.Screen name="Ticket" component={TicketScreen} />
-      <RootStack.Screen name="AdminMovies" component={AdminMoviesScreen} />
       <RootStack.Screen name="AddMovie" component={AddMovieScreen} />
       <RootStack.Screen name="ManageScreenings" component={ManageScreeningsScreen} />
       <RootStack.Screen name="Programme" component={ProgrammeScreen} />

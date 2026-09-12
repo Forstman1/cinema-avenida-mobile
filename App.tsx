@@ -23,6 +23,7 @@ export default function App() {
 
   const [fontsLoaded] = useFonts({
     'EBGaramond-SemiBold': require('@expo-google-fonts/eb-garamond/600SemiBold/EBGaramond_600SemiBold.ttf'),
+    'EBGaramond-Bold': require('@expo-google-fonts/eb-garamond/700Bold/EBGaramond_700Bold.ttf'),
     'Inter-Regular': require('@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf'),
     'Inter-Medium': require('@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf'),
     'Inter-SemiBold': require('@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf'),

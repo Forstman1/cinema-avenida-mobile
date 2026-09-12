@@ -41,21 +41,16 @@ export interface AdminScreeningsStore extends NormalizedScreenings {
   deletingScreeningId: number | null;
   deleteScreeningError: string | null;
   fetchScreeningsByDate: (date: ISODateString, options?: FetchScreeningsOptions) => Promise<Screening[]>;
-  refreshScreeningsByDate: (date: ISODateString) => Promise<Screening[]>;
   fetchScreeningsByMovieId: (movieId: number, options?: FetchScreeningsOptions) => Promise<Screening[]>;
-  refreshScreeningsByMovieId: (movieId: number) => Promise<Screening[]>;
   createScreening: (payload: ScreeningRequest) => Promise<Screening | null>;
   updateScreening: (
     id: UpdateScreeningRequest['id'],
     payload: UpdateScreeningRequest['payload'],
   ) => Promise<Screening | null>;
   deleteScreening: (id: number) => Promise<boolean>;
-  invalidateDate: (date: ISODateString) => void;
-  invalidateMovie: (movieId: number) => void;
   clearCreateError: () => void;
   clearUpdateError: () => void;
   clearDeleteError: () => void;
-  clearScreenings: () => void;
   reset: () => void;
 }
 
@@ -279,8 +274,6 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
     return request;
   },
 
-  refreshScreeningsByDate: async (date) => get().fetchScreeningsByDate(date, { force: true }),
-
   fetchScreeningsByMovieId: async (movieId, { force = true } = {}) => {
     if (!force && Object.prototype.hasOwnProperty.call(get().screeningIdsByMovieId, movieId)) {
       return (get().screeningIdsByMovieId[movieId] ?? [])
@@ -353,9 +346,6 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
     inFlightMovieRequests.set(movieId, request);
     return request;
   },
-
-  refreshScreeningsByMovieId: async (movieId) =>
-    get().fetchScreeningsByMovieId(movieId, { force: true }),
 
   createScreening: async (payload) => {
     if (get().isCreatingScreening) return null;
@@ -461,67 +451,9 @@ export const useAdminScreeningsStore = create<AdminScreeningsStore>((set, get) =
     }
   },
 
-  invalidateDate: (date) => {
-    const dateKey = getDateKey(date);
-    adminScreeningsDataVersion += 1;
-    dateRequestIds.set(dateKey, (dateRequestIds.get(dateKey) ?? 0) + 1);
-    inFlightDateRequests.delete(dateKey);
-    inFlightMovieRequests.clear();
-    const normalized = replaceDate(get(), dateKey, []);
-    set({
-      ...normalized,
-      isLoadingByDate: { ...get().isLoadingByDate, [dateKey]: false },
-      isRefreshingByDate: { ...get().isRefreshingByDate, [dateKey]: false },
-      dateErrors: { ...get().dateErrors, [dateKey]: null },
-    });
-  },
-
-  invalidateMovie: (movieId) => {
-    adminScreeningsDataVersion += 1;
-    movieRequestIds.set(movieId, (movieRequestIds.get(movieId) ?? 0) + 1);
-    inFlightMovieRequests.delete(movieId);
-    inFlightDateRequests.clear();
-    const normalized = replaceMovie(get(), movieId, []);
-    set({
-      ...normalized,
-      isLoadingByMovieId: { ...get().isLoadingByMovieId, [movieId]: false },
-      isRefreshingByMovieId: { ...get().isRefreshingByMovieId, [movieId]: false },
-      movieErrors: { ...get().movieErrors, [movieId]: null },
-    });
-  },
-
   clearCreateError: () => set({ createScreeningError: null }),
   clearUpdateError: () => set({ updateScreeningError: null }),
   clearDeleteError: () => set({ deleteScreeningError: null }),
-
-  clearScreenings: () => {
-    adminScreeningsGeneration += 1;
-    adminScreeningsDataVersion += 1;
-    inFlightDateRequests.clear();
-    inFlightMovieRequests.clear();
-    dateRequestIds.clear();
-    movieRequestIds.clear();
-    set({
-      screeningsById: {},
-      screeningIdsByDate: {},
-      screeningIdsByMovieId: {},
-      isLoadingByDate: {},
-      isRefreshingByDate: {},
-      isLoadingByMovieId: {},
-      isRefreshingByMovieId: {},
-      dateErrors: {},
-      movieErrors: {},
-      isCreatingScreening: false,
-      createScreeningError: null,
-      lastCreatedScreening: null,
-      isUpdatingScreening: false,
-      updatingScreeningId: null,
-      updateScreeningError: null,
-      isDeletingScreening: false,
-      deletingScreeningId: null,
-      deleteScreeningError: null,
-    });
-  },
 
   reset: () => {
     adminScreeningsGeneration += 1;

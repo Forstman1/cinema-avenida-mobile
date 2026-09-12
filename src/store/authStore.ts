@@ -43,6 +43,12 @@ function getAuthErrorMessage(error: unknown, defaultMessage: string): string {
   const details = getApiErrorDetails(error);
   if (details.status === 400) return details.message || 'Veuillez remplir tous les champs.';
   if (details.status === 401) return 'Email ou mot de passe incorrect.';
+  if (details.status === 404) {
+    return 'Service de connexion indisponible. Vérifiez que le serveur est démarré.';
+  }
+  if (details.status !== null && details.status >= 500) {
+    return 'Le serveur est temporairement indisponible. Veuillez réessayer.';
+  }
   if (details.status === 409) return 'Cet email est déjà utilisé.';
   return getApiErrorMessage(error, defaultMessage);
 }
