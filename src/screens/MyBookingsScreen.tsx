@@ -323,7 +323,10 @@ export default function MyBookingsScreen() {
     const cancellationInProgress = cancellingReservationId !== null;
 
     return (
-      <View key={reservation.id} style={[styles.card, isHistory && styles.cardDimmed]}>
+      <View
+        key={reservation.id}
+        style={[styles.card, !isHistory && styles.cardActive, isHistory && styles.cardDimmed]}
+      >
         <PosterImage
           uri={movie?.poster}
           title={movie?.title}
@@ -384,7 +387,7 @@ export default function MyBookingsScreen() {
               </TouchableOpacity>
             )}
             {cancellation.windowClosed && !isHistory ? (
-              <Text style={styles.cancellationUnavailableText}>
+              <Text style={styles.cancellationUnavailableText} numberOfLines={2}>
                 {CANCELLATION_WINDOW_MESSAGE}
               </Text>
             ) : cancellation.allowed && !isHistory ? (
@@ -702,6 +705,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 16,
     padding: 10,
+    maxHeight: 142,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.24,
@@ -715,6 +720,8 @@ const styles = StyleSheet.create({
   },
   pendingContent: {
     flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
     justifyContent: 'space-between',
     paddingVertical: 2,
   },
@@ -824,29 +831,38 @@ const styles = StyleSheet.create({
   },
   card: {
     flexDirection: 'row',
-    gap: 13,
+    gap: 12,
     backgroundColor: '#201f1f',
     borderRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(229,226,225,0.08)',
-    padding: 10,
+    padding: 12,
+    maxHeight: 214,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.16,
     shadowRadius: 10,
     elevation: 3,
   },
+  cardActive: {
+    backgroundColor: '#211b1b',
+    borderColor: 'rgba(178,34,34,0.3)',
+  },
   cardDimmed: {
     backgroundColor: '#191919',
     borderColor: 'rgba(229,226,225,0.04)',
   },
   poster: {
-    width: 92,
-    minHeight: 176,
+    width: 78,
+    height: 118,
+    maxHeight: 118,
     flexShrink: 0,
   },
   cardBody: {
     flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
     paddingVertical: 2,
   },
   cardTopRow: {
@@ -972,7 +988,9 @@ const styles = StyleSheet.create({
   },
   cardActions: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
+    minHeight: 34,
     marginTop: 'auto',
   },
   viewTicketButton: {
@@ -981,7 +999,8 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: '#b22222',
     borderRadius: 8,
-    paddingVertical: 9,
+    minHeight: 34,
+    paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -996,7 +1015,8 @@ const styles = StyleSheet.create({
   cancelButton: {
     backgroundColor: 'transparent',
     borderRadius: 8,
-    paddingVertical: 9,
+    minHeight: 34,
+    paddingVertical: 7,
     paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1012,6 +1032,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: 'Inter-Regular',
     fontSize: 10,
+    lineHeight: 13,
     color: '#777',
     textAlign: 'right',
   },

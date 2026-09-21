@@ -9,6 +9,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -102,6 +103,7 @@ function groupSeatsByRow(seats: Seat[]): SeatRow[] {
 export default function SeatMapScreen({ route }: SeatMapScreenProps) {
   const navigation = useNavigation<SeatMapNavigationProp>();
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
   const { movie, screening } = route.params ?? {};
 
   const [refreshing, setRefreshing] = useState(false);
@@ -127,6 +129,52 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
 
   const selectedIds = useMemo(() => new Set(selectedSeatIds), [selectedSeatIds]);
   const seatRows = useMemo(() => groupSeatsByRow(seats), [seats]);
+  const maxSeatsPerRow = useMemo(
+    () => seatRows.reduce((maximum, row) => Math.max(maximum, row.seats.length), 0),
+    [seatRows]
+  );
+  const seatMetrics = useMemo(() => {
+    const rowLabelWidth = 20;
+    const rowLabelGap = 8;
+    const aisleWidth = maxSeatsPerRow >= 8 ? 10 : 0;
+    const seatGap = maxSeatsPerRow >= 13 ? 3 : maxSeatsPerRow >= 10 ? 4 : 6;
+    const availableWidth = Math.max(
+      180,
+      viewportWidth -
+        40 -
+        rowLabelWidth -
+        rowLabelGap -
+        aisleWidth -
+        (aisleWidth > 0 ? seatGap : 0)
+    );
+    const seatSize = Math.max(
+      17,
+      Math.min(
+        28,
+        Math.floor(
+          (availableWidth - Math.max(0, maxSeatsPerRow - 1) * seatGap) /
+            Math.max(maxSeatsPerRow, 1)
+        )
+      )
+    );
+    const seatAreaWidth =
+      maxSeatsPerRow * seatSize +
+      Math.max(0, maxSeatsPerRow - 1) * seatGap +
+      aisleWidth +
+      (aisleWidth > 0 ? seatGap : 0);
+
+    return {
+      aisleWidth,
+      gridWidth: rowLabelWidth + rowLabelGap + seatAreaWidth,
+      screenWidth: Math.min(
+        viewportWidth - 48,
+        Math.max(220, rowLabelWidth + rowLabelGap + seatAreaWidth - 18)
+      ),
+      seatGap,
+      seatIconSize: Math.max(14, seatSize - 2),
+      seatSize,
+    };
+  }, [maxSeatsPerRow, viewportWidth]);
   const pendingLockExpiry = useMemo(
     () => getReservationLockExpiry(pendingReservation),
     [pendingReservation]
@@ -282,19 +330,22 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     const category = seat.category;
     const categoryPresentation = getCategoryPresentation(category);
 
+    let seatColor = categoryPresentation.color;
+    let seatBorderColor = categoryPresentation.borderColor;
     let seatStyle;
     if (isSelected) {
+      seatColor = '#fff';
+      seatBorderColor = '#b22222';
       seatStyle = [styles.seat, styles.seatSelected];
     } else if (!tappable) {
+      seatColor = seat.status === 'VERROUILLE' ? '#a36b6b' : '#666';
+      seatBorderColor = seat.status === 'VERROUILLE' ? '#553030' : '#353535';
       seatStyle = [
         styles.seat,
         seat.status === 'VERROUILLE' ? styles.seatLocked : styles.seatOccupied,
       ];
     } else {
-      seatStyle = [
-        styles.seat,
-        { borderColor: categoryPresentation.borderColor },
-      ];
+      seatStyle = [styles.seat, styles.seatAvailable, { borderColor: categoryPresentation.borderColor }];
     }
 
     return (
@@ -303,9 +354,28 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
         activeOpacity={tappable ? 0.7 : 1}
         onPress={() => toggleSeat(seat)}
         disabled={!tappable}
-        style={seatStyle}
+        hitSlop={4}
+        style={[
+          styles.seatTouchTarget,
+          { width: seatMetrics.seatSize, height: seatMetrics.seatSize },
+        ]}
       >
-        {isSelected && <Text style={styles.seatNumber}>{seat.number}</Text>}
+        <View
+          style={[
+            ...seatStyle,
+            {
+              width: seatMetrics.seatSize,
+              height: seatMetrics.seatSize,
+              borderColor: seatBorderColor,
+            },
+          ]}
+        >
+          {isSelected ? (
+            <Text style={styles.seatNumber}>{seat.number}</Text>
+          ) : (
+            <MaterialIcons name="event-seat" size={seatMetrics.seatIconSize} color={seatColor} />
+          )}
+        </View>
       </TouchableOpacity>
     );
   };
@@ -314,8 +384,15 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
     return (
       <View key={name} style={styles.row}>
         <Text style={styles.rowLabel}>{name}</Text>
-        <View style={styles.rowSeats}>
-          {rowSeats.map(renderSeat)}
+        <View style={[styles.rowSeats, { gap: seatMetrics.seatGap }]}>
+          {rowSeats.map((seat, index) => (
+            <React.Fragment key={seat.id}>
+              {index === Math.ceil(rowSeats.length / 2) && rowSeats.length >= 8 && (
+                <View style={{ width: seatMetrics.aisleWidth }} />
+              )}
+              {renderSeat(seat)}
+            </React.Fragment>
+          ))}
         </View>
       </View>
     );
@@ -430,7 +507,7 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
       >
         {/* Écran */}
         <View style={styles.screenWrapper}>
-          <View style={styles.screenCurve} />
+          <View style={[styles.screenCurve, { width: seatMetrics.screenWidth }]} />
           <Text style={styles.screenLabel}>ÉCRAN</Text>
         </View>
 
@@ -438,9 +515,12 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.gridScrollContent}
+          contentContainerStyle={[
+            styles.gridScrollContent,
+            { width: Math.max(viewportWidth, seatMetrics.gridWidth) },
+          ]}
         >
-          <View style={styles.grid}>
+          <View style={[styles.grid, { width: seatMetrics.gridWidth }]}>
             {seatRows.length > 0 ? (
               seatRows.map(renderRow)
             ) : (
@@ -478,15 +558,21 @@ export default function SeatMapScreen({ route }: SeatMapScreenProps) {
               );
             })}
             <View style={styles.legendItem}>
-              <View style={[styles.legendSeat, styles.seatSelected]} />
+              <View style={[styles.legendSeat, styles.seatSelected]}>
+                <MaterialIcons name="event-seat" size={14} color="#fff" />
+              </View>
               <Text style={styles.legendName}>Sélectionné</Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.legendSeat, styles.seatOccupied]} />
+              <View style={[styles.legendSeat, styles.seatOccupied]}>
+                <MaterialIcons name="event-seat" size={14} color="#666" />
+              </View>
               <Text style={styles.legendName}>Occupé</Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.legendSeat, styles.seatLocked]} />
+              <View style={[styles.legendSeat, styles.seatLocked]}>
+                <MaterialIcons name="event-seat" size={14} color="#a36b6b" />
+              </View>
               <Text style={styles.legendName}>Verrouillé</Text>
             </View>
           </View>
@@ -629,7 +715,8 @@ const styles = StyleSheet.create({
   },
   screenWrapper: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginTop: 8,
+    marginBottom: 22,
   },
   screenCurve: {
     width: 280,
@@ -653,10 +740,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   gridScrollContent: {
-    paddingHorizontal: 16,
+    alignItems: 'center',
   },
   grid: {
-    gap: 10,
+    gap: 9,
   },
   emptySeatState: {
     alignItems: 'center',
@@ -680,7 +767,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   rowLabel: {
     width: 20,
@@ -691,34 +778,42 @@ const styles = StyleSheet.create({
   },
   rowSeats: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+  },
+  seatTouchTarget: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   seat: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 4,
     borderWidth: 1.5,
     borderColor: '#555',
     backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   seatSelected: {
     backgroundColor: '#b22222',
     borderColor: '#b22222',
   },
+  seatAvailable: {
+    borderWidth: 0,
+  },
   seatOccupied: {
-    backgroundColor: '#3a3a3a',
-    borderColor: '#666',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
   },
   seatLocked: {
-    backgroundColor: '#553030',
-    borderColor: '#b45b5b',
-    borderStyle: 'dashed',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
   },
   seatNumber: {
     fontFamily: 'Inter-Bold',
-    fontSize: 10,
+    fontSize: 9,
     color: '#fff',
   },
   legendCard: {
@@ -753,9 +848,11 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   legendSeat: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   legendName: {
     fontFamily: 'Inter-Regular',
